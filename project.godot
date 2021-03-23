@@ -1,0 +1,67 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=4
+
+_global_script_classes=[ {
+"base": "Spatial",
+"class": "BatchedMeshInstance",
+"language": "NativeScript",
+"path": "res://addons/3d_batcher/batched_mesh_instance.gdns"
+}, {
+"base": "Node",
+"class": "BatchedMeshManager",
+"language": "NativeScript",
+"path": "res://addons/3d_batcher/batched_mesh_manager.gdns"
+}, {
+"base": "Node",
+"class": "Rapier3D",
+"language": "NativeScript",
+"path": "res://addons/rapier3d/rapier3d.gdns"
+}, {
+"base": "Spatial",
+"class": "Rapier3D_Box",
+"language": "NativeScript",
+"path": "res://addons/rapier3d/box.gdns"
+}, {
+"base": "Spatial",
+"class": "Rapier3D_RigidBody",
+"language": "NativeScript",
+"path": "res://addons/rapier3d/rigid_body.gdns"
+}, {
+"base": "Spatial",
+"class": "Rapier3D_StaticBody",
+"language": "NativeScript",
+"path": "res://addons/rapier3d/static_body.gdns"
+} ]
+_global_script_class_icons={
+"BatchedMeshInstance": "",
+"BatchedMeshManager": "",
+"Rapier3D": "",
+"Rapier3D_Box": "",
+"Rapier3D_RigidBody": "",
+"Rapier3D_StaticBody": ""
+}
+
+[application]
+
+config/name="Rapier3D"
+config/description="Rapier3D physics for Godot"
+run/main_scene="res://boxes.tscn"
+
+[autoload]
+
+BatchedMeshManager="*res://addons/3d_batcher/batched_mesh_manager.gdns"
+
+[editor_plugins]
+
+enabled=PoolStringArray( "3d_batcher" )
+
+[rendering]
+
+environment/default_environment="res://default_env.tres"

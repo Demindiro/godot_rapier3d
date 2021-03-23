@@ -1,0 +1,8 @@
+[gd_resource type="NativeScript" load_steps=2 format=2]
+
+[ext_resource path="res://addons/rapier3d/rapier3d.gdnlib" type="GDNativeLibrary" id=1]
+
+[resource]
+class_name = "RigidBody"
+library = ExtResource( 1 )
+script_class_name = "Rapier3D_RigidBody"

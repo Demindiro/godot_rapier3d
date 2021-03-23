@@ -1,0 +1,23 @@
+[resource]
+
+entry/X11.64="res://addons/3d_batcher/lib/libgd_3d_batcher.so"
+dependency/X11.64=[  ]
+
+[general]
+
+singleton=false
+load_once=true
+symbol_prefix="godot_"
+reloadable=true
+
+[entry]
+
+OSX.64="res://addons/3d_batcher/lib/libgd_3d_batcher.dylib"
+Windows.64="res://addons/3d_batcher/lib/gd_3d_batcher.dll"
+X11.64="res://addons/3d_batcher/lib/libgd_3d_batcher.so"
+
+[dependencies]
+
+OSX.64=[  ]
+Windows.64=[  ]
+X11.64=[  ]
