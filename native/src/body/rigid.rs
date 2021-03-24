@@ -35,6 +35,13 @@ impl RigidBody {
     }
 
 	#[export]
+	fn _exit_tree(&mut self, owner: TRef<Spatial>) {
+		let body = self.body.expect("Body handle is None");
+        let world = owner.get_world().expect("Failed to get World");
+        crate::remove_rigid_body(&world, body).expect("Failed to remove body");
+	}
+
+	#[export]
 	fn _physics_process(&self, owner: TRef<Spatial>, _delta: f32) {
 		let body = self.body.expect("Body handle is None");
         let world = owner.get_world().expect("Failed to get World");

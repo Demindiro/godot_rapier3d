@@ -52,11 +52,12 @@ _global_script_class_icons={
 
 config/name="Rapier3D"
 config/description="Rapier3D physics for Godot"
-run/main_scene="res://boxes.tscn"
+run/main_scene="res://benchmark/benchmark.tscn"
 
 [autoload]
 
 BatchedMeshManager="*res://addons/3d_batcher/batched_mesh_manager.gdns"
+Rapier3d="*res://addons/rapier3d/rapier3d.gdns"
 
 [editor_plugins]
 

@@ -13,6 +13,7 @@ export var colors := PoolColorArray([Color.white, Color.red, Color.green, Color.
 
 
 func _ready():
+	BatchedMeshManager.enable_culling = false # Should reduce rendering impact a little more
 	var i := 0
 	for a in x:
 		for b in y:

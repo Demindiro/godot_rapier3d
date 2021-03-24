@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://benchmark/stats.gd" type="Script" id=1]
+
+
+[node name="Stats" type="Panel"]
+margin_right = 186.0
+margin_bottom = 94.0
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Stats" type="Label" parent="."]
+process_priority = 10
+margin_right = 120.0
+margin_bottom = 35.0
+script = ExtResource( 1 )
+__meta__ = {
+"_edit_use_anchors_": false
+}

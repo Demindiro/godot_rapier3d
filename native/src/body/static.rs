@@ -20,6 +20,13 @@ impl StaticBody {
         let body = RigidBodyBuilder::new_static().build();
         self.body = Some(crate::add_rigid_body(world, body));
     }
+
+	#[export]
+	fn _exit_tree(&mut self, owner: TRef<Spatial>) {
+		let body = self.body.expect("Body handle is None");
+        let world = owner.get_world().expect("Failed to get World");
+        crate::remove_rigid_body(&world, body).expect("Failed to remove body");
+	}
 }
 
 impl super::Body for StaticBody {

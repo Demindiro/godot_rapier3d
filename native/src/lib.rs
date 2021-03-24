@@ -97,11 +97,25 @@ fn add_collider(
     Ok(world.colliders.insert(collider, body, &mut world.bodies))
 }
 
+fn remove_rigid_body(world: &Ref<World>, body: RigidBodyHandle) -> Result<(), ()> {
+	let mut worlds = get_worlds_mut!();
+	let world = worlds.get_mut(world).ok_or(())?;
+	world.bodies.remove(body, &mut world.colliders, &mut world.joints).map(|_| ()).ok_or(())
+}
+
+fn remove_collider(world: &Ref<World>, collider: ColliderHandle) -> Result<(), ()> {
+	let mut worlds = get_worlds_mut!();
+	let world = worlds.get_mut(world).ok_or(())?;
+	world.colliders.remove(collider, &mut world.bodies, true).map(|_| ()).ok_or(())
+}
+
 fn create_world() -> World3D {
+	let mut integration_parameters = IntegrationParameters::default();
+	integration_parameters.dt = 1.0 / 60.0; // TODO get this value from project settings
     World3D {
         pipeline: PhysicsPipeline::new(),
         gravity: Vector3::new(0.0, -9.81, 0.0),
-        integration_parameters: IntegrationParameters::default(),
+        integration_parameters,
         broad_phase: BroadPhase::new(),
         narrow_phase: NarrowPhase::new(),
         bodies: RigidBodySet::new(),

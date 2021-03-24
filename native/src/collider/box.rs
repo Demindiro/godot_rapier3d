@@ -2,6 +2,7 @@ use crate::body::*;
 use crate::util::*;
 use gdnative::api::Spatial;
 use gdnative::prelude::*;
+use rapier3d::dynamics::RigidBodyHandle;
 use rapier3d::geometry::{ColliderHandle, ColliderBuilder};
 
 #[derive(NativeClass)]
@@ -46,4 +47,11 @@ impl Box {
             godot_warn!("Colliders need to be attached to a Body")
         }
     }
+
+	#[export]
+	fn _exit_tree(&mut self, owner: TRef<Spatial>) {
+		let collider = self.collider.expect("Collider & body handle is None");
+        let world = owner.get_world().expect("Failed to get World");
+        crate::remove_collider(&world, collider).expect("Failed to remove collider");
+	}
 }
