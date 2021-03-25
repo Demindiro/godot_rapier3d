@@ -63,6 +63,17 @@ Rapier3d="*res://addons/rapier3d/rapier3d.gdns"
 
 enabled=PoolStringArray( "3d_batcher" )
 
+[gdnative]
+
+singletons=[  ]
+
+[physics]
+
+3d/active_soft_world=false
+3d/custom_library_path="res://addons/rapier3d/rapier3d.gdnlib"
+common/enable_object_picking=false
+#3d/physics_engine="Custom"
+
 [rendering]
 
 environment/default_environment="res://default_env.tres"

@@ -1,4 +1,9 @@
+.import/
 bin/
 target/
 lib/
 logs/
+module/fn_table.h
+module/server_gen.cpp
+__pycache__/
+*.o

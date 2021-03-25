@@ -9,5 +9,5 @@ pub use rigid::*;
 use rapier3d::dynamics::RigidBodyHandle;
 
 pub trait Body {
-    fn handle(&self) -> Option<RigidBodyHandle>;
+	fn handle(&self) -> Option<(RigidBodyHandle, crate::SpaceHandle)>;
 }

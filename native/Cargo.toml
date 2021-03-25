@@ -13,3 +13,6 @@ crate-type = ["cdylib"]
 rapier3d = { version = "*", features = ["simd-nightly"] }
 gdnative = "*"
 lazy_static = "*"
+
+[build-dependencies]
+bindgen = "*"

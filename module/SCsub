@@ -1,0 +1,4 @@
+Import('env')
+
+env.add_source_files(env.modules_sources, "*.cpp")
+#env.Append(CPPPATH=["#modules", "#modules/gdnative", "#modules/gdnative/include"])

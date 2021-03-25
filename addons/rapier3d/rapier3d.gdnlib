@@ -3,7 +3,7 @@
 singleton=false
 load_once=true
 symbol_prefix="gd_rapier3d_"
-reloadable=true
+reloadable=false
 
 [entry]
 
