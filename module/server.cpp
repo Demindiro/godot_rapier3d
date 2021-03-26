@@ -36,9 +36,10 @@ void PluggablePhysicsServer::init() {
 
 		void *handle;
 		String init_symbol = "gdphysics_init";
-		this->library.set_library(lib);
-		this->library.initialize();
-		err = this->library.get_symbol(init_symbol, handle);
+		this->library.instance();
+		this->library->set_library(lib);
+		this->library->initialize();
+		err = this->library->get_symbol(init_symbol, handle);
 		ERR_FAIL_COND_MSG(err, "Failed to get init handle");
 
 		// SAFETY: the callee must have the exact same signature

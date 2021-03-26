@@ -52,7 +52,7 @@ class PluggablePhysicsServer : public PhysicsServer {
 	PluggablePhysicsDirectBodyState body_state_singleton;
 
 	struct fn_table fn_table;
-	GDNative library;
+	Ref<GDNative> library;
 
 	mutable RID_Owner<PluggablePhysicsRID_Data> rids;
 	HashMap<index_t, RID, PluggablePhysicsIndexHasher> reverse_rids;
