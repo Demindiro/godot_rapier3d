@@ -24,11 +24,12 @@ FN_TABLE_EXCLUDE = {
 # Extra functions to add to fn_table.h
 FN_TABLE_CUSTOM_FUNCTIONS = (
     'void (*body_get_direct_state)(index_t id, struct body_state *state)',
-    'void (*free)(index_t id)',
+    'void (*free)(index_mut_t id)',
 )
 
 
 CLASS_NAME = 'PluggablePhysicsServer'
+RID_DATA_NAME = 'PluggablePhysicsRID_Data'
 FN_STRUCT_NAME = 'fn_table'
 
 SERVER_CPP_TAIL = ''
@@ -98,7 +99,7 @@ def create_server_function(method, ret, args):
 
     # Determine correct error macro and return value
     if ret == 'void':
-        err = f'ERR_FAIL_COND_MSG(!{FN_STRUCT_NAME}.{method}, "Not implemented")'
+        err = f'ERR_FAIL_COND_MSG({FN_STRUCT_NAME}.{method} == nullptr, "Not implemented")'
     else:
         tbl = {
             'bool': 'false',
@@ -120,7 +121,7 @@ def create_server_function(method, ret, args):
             'Vector<Vector3>': 'Vector<Vector3>()',
         }
         err_ret = tbl.get(ret, 'nullptr')
-        err = f'ERR_FAIL_COND_V_MSG(!{FN_STRUCT_NAME}.{method}, {err_ret}, "Not implemented")'
+        err = f'ERR_FAIL_COND_V_MSG({FN_STRUCT_NAME}.{method} == nullptr, {err_ret}, "Not implemented")'
     line += f'\t{err};\n'
 
     # Create argument list for fn_table function
@@ -129,9 +130,14 @@ def create_server_function(method, ret, args):
         a = a.split()
         (typ, name) = a[-2:]
         if typ == 'RID':
+            # Make sure the RID is valid
+            if ret == 'void':
+                line += f'\tERR_FAIL_COND_MSG(!{name}.is_valid(), "Invalid RID");\n'
+            else:
+                line += f'\tERR_FAIL_COND_V_MSG(!{name}.is_valid(), {err_ret}, "Invalid RID");\n'
             # Get the actual ID
             new_name = name + '_index'
-            line += f'\tindex_t {new_name} = {name}.get_id();\n'
+            line += f'\tindex_t {new_name} = this->get_index({name});\n'
             name = new_name
         else:
             if name[0] == '*':
@@ -148,10 +154,10 @@ def create_server_function(method, ret, args):
         line += f'\tindex_t index = {ret_s};\n'
         # If the method name ends with '_create' we most likely need to create a new RID
         if method.endswith('_create') or method.startswith('joint_create_'):
-            ret_s = 'this->rids.create(index)'
+            ret_s = 'this->make_rid(index)'
         # Otherwise, we need to look up an existing one
         else:
-            ret_s = 'this->rids.get(index)'
+            ret_s = 'this->reverse_rids.get(index)'
 
     # Create wrapper
     line += f'\treturn {ret_s};\n'

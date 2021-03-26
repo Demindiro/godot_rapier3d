@@ -6,8 +6,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 }
 
 unsafe extern "C" fn create() -> ffi::Index {
-	println!("Then God created the World");
-	super::add_index(Index::Space(crate::create_space()))
+	Index::add_space(crate::create_space()).raw()
 }
 
 unsafe extern "C" fn set_active(index: ffi::Index, active: bool) {

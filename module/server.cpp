@@ -13,6 +13,7 @@
 
 
 PluggablePhysicsServer::PluggablePhysicsServer() {
+	zeromem(&this->fn_table, sizeof(this->fn_table));
 }
 PluggablePhysicsServer::~PluggablePhysicsServer() {
 	// TODO
@@ -24,20 +25,13 @@ PluggablePhysicsServer::~PluggablePhysicsServer() {
 	*/
 }
 
-#include <cstdio>
-
 void PluggablePhysicsServer::init() {
     Variant lib_path_variant = ProjectSettings::get_singleton()->get_setting("physics/3d/custom_library_path");
     String lib_path = String(lib_path_variant);
 
     if (lib_path != "") {
-		//ResourceLoader *loader = ResourceLoader::get_singleton();
 		Error err;
 		RES lib = ResourceLoader::load(lib_path, "", false, &err);
-		printf("%d\n", err);
-		printf("%d\n", err);
-		printf("%d\n", err);
-		printf("%d\n", err);
 		ERR_FAIL_COND_MSG(err, "Failed to load physics server library");
 
 		void *handle;
@@ -54,7 +48,6 @@ void PluggablePhysicsServer::init() {
 }
 
 void PluggablePhysicsServer::_bind_methods() {
-
 }
 
 void PluggablePhysicsServer::step(float delta) {
@@ -81,21 +74,24 @@ void PluggablePhysicsServer::step(float delta) {
 
 PhysicsDirectBodyState *PluggablePhysicsServer::body_get_direct_state(RID rid) {
 	ERR_FAIL_COND_V_MSG(this->fn_table.body_get_direct_state == nullptr, nullptr, "Not implemented");
-	index_t id = rid.get_id();
+	index_t id = this->get_index(rid);
 	(*this->fn_table.body_get_direct_state)(id, &this->body_state_singleton.state);
 	return &this->body_state_singleton;
 }
 
 void PluggablePhysicsServer::body_set_force_integration_callback(RID body, Object *receiver, const StringName &method, const Variant &userdata) {
-	index_t id = body.get_id();
+	index_t id = this->get_index(body);
 	Callback callback(receiver, method, userdata);
 	this->callbacks.set(id, callback);
 }
 
 void PluggablePhysicsServer::free(RID rid) {
 	ERR_FAIL_COND_MSG(this->fn_table.free == nullptr, "Not implemented");
-	index_t id = rid.get_id();
-	(*this->fn_table.free)(id);
-	this->rids.remove(id);
+	index_t id = this->get_index(rid);
+	this->rids.free(rid);
+	this->reverse_rids.erase(id);
 	this->callbacks.erase(id);
+	// SAFETY: the RID is removed
+	index_mut_t mut_id = (index_mut_t)id;
+	(*this->fn_table.free)(mut_id);
 }

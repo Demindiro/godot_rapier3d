@@ -8,96 +8,265 @@ use crate::*;
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
+use core::num::NonZeroU32;
 use core::ops::DerefMut;
-use rapier3d::dynamics::{Joint, JointHandle, RigidBody, RigidBodyHandle};
-use rapier3d::geometry::{Collider, ColliderHandle};
 use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
 use std::io;
 use std::sync::RwLock;
 
 lazy_static::lazy_static! {
-	// index 0 is considered invalid
-	static ref INDICES: RwLock<(Vec<Index>, Vec<ffi::Index>)> = RwLock::new((vec![Index::None], Vec::new()));
+	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());
+	static ref BODY_INDICES: RwLock<SparseVec<body::Body>> = RwLock::new(SparseVec::new());
+	static ref JOINT_INDICES: RwLock<SparseVec<()>> = RwLock::new(SparseVec::new());
+	static ref SHAPE_INDICES: RwLock<SparseVec<shape::Shape>> = RwLock::new(SparseVec::new());
 }
 
-macro_rules! indices {
-	() => {
-		INDICES.read().expect("Failed to read-lock INDICES")
-	};
+struct SparseVec<T> {
+	elements: Vec<Option<T>>,
+	empty_slots: Vec<usize>,
 }
-
-macro_rules! indices_mut {
-	() => {
-		INDICES.write().expect("Failed to write-lock INDICES")
-	};
-}
-
-type ObjectID = core::num::NonZeroU32;
 
 enum Instance<A, L> {
 	Attached(A, SpaceHandle),
 	Loose(L),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Index {
-	None,
-	Space(SpaceHandle),
-	Body(body::Body),
-	Joint(Instance<JointHandle, Joint>),
-	Shape(shape::Shape),
+	Space(usize),
+	Body(usize),
+	Joint(usize),
+	Shape(usize),
 }
 
-macro_rules! map_index_mut {
-	($fn:ident, $struct:ty, $variant:path, $name:literal) => {
-		fn $fn<F>(&mut self, f: F)
-		where
-			F: FnOnce(&mut $struct),
-		{
-			if let $variant(body) = self {
-				f(body);
-			} else {
-				eprintln!("ID does not point to a {}", $name);
-			}
+#[derive(Debug)]
+enum IndexError {
+	WrongType,
+	NoElement,
+}
+
+struct ObjectID(NonZeroU32);
+
+type Joint = ();
+
+impl<T> SparseVec<T> {
+	fn new() -> Self {
+		Self {
+			elements: Vec::new(),
+			empty_slots: Vec::new(),
 		}
-	};
+	}
+
+	fn add(&mut self, element: T) -> usize {
+		if let Some(index) = self.empty_slots.pop() {
+			self.elements[index] = Some(element);
+			index
+		} else {
+			self.elements.push(Some(element));
+			self.elements.len() - 1
+		}
+	}
+
+	fn get(&self, index: usize) -> Option<&T> {
+		self.elements.get(index).map(Option::as_ref).flatten()
+	}
+
+	fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+		self.elements.get_mut(index).map(Option::as_mut).flatten()
+	}
+
+	fn remove(&mut self, index: usize) -> Option<T> {
+		self.elements.get_mut(index).map(Option::take).flatten()
+	}
 }
 
 macro_rules! map_index {
-	($fn:ident, $struct:ty, $variant:path, $name:literal) => {
-		fn $fn<F>(&self, f: F)
+	($fn:ident, $fn_mut:ident, $fn_add:ident, $fn_remove:ident, $array:ident, $variant:ident, $struct:ty) => {
+		fn $fn<F, R>(self, f: F) -> Result<R, IndexError>
 		where
-			F: FnOnce(&$struct),
+			F: FnOnce(&$struct) -> R,
 		{
-			if let $variant(body) = self {
-				f(body);
+			const NAME: &str = stringify!($variant);
+			if let Index::$variant(index) = self {
+				let w = $array
+					.read()
+					.expect(&format!("Failed to read-lock {} array", NAME));
+				if let Some(e) = w.get(index) {
+					Ok(f(e))
+				} else {
+					godot_error!("No {} with ID {}", NAME, index);
+					Err(IndexError::NoElement)
+				}
 			} else {
-				eprintln!("ID does not point to a {}", $name);
+				godot_error!("ID is not a {}", NAME);
+				godot_error!("{:?}", self);
+				Err(IndexError::WrongType)
 			}
+		}
+
+		fn $fn_mut<F, R>(self, f: F) -> Result<R, IndexError>
+		where
+			F: FnOnce(&mut $struct) -> R,
+		{
+			const NAME: &str = stringify!($variant);
+			if let Index::$variant(index) = self {
+				let mut w = $array
+					.write()
+					.expect(&format!("Failed to write-lock {} array", NAME));
+				if let Some(e) = w.get_mut(index) {
+					Ok(f(e))
+				} else {
+					godot_error!("No {} with ID {}", NAME, index);
+					Err(IndexError::NoElement)
+				}
+			} else {
+				godot_error!("ID is not a {}", NAME);
+				godot_error!("{:?}", self);
+				Err(IndexError::WrongType)
+			}
+		}
+
+		fn $fn_add(element: $struct) -> Index {
+			let mut w = $array
+				.write()
+				.expect(&format!("Failed to write-lock {} array", stringify!($variant)));
+			let index = w.add(element);
+			Self::$variant(index)
 		}
 	};
 }
 
+use body::Body;
+use shape::Shape;
+
 impl Index {
-	map_index_mut!(map_body_mut, body::Body, Index::Body, "Body");
-	map_index_mut!(map_shape_mut, shape::Shape, Index::Shape, "Space");
-	map_index_mut!(map_space_mut, SpaceHandle, Index::Space, "Space");
-	map_index!(map_body, body::Body, Index::Body, "Body");
-	map_index!(map_shape, shape::Shape, Index::Shape, "Space");
-	map_index!(map_space, SpaceHandle, Index::Space, "Space");
+	map_index!(
+		map_body,
+		map_body_mut,
+		add_body,
+		remove_body,
+		BODY_INDICES,
+		Body,
+		Body
+	);
+	map_index!(
+		map_joint,
+		map_joint_mut,
+		add_joint,
+		remove_joint,
+		JOINT_INDICES,
+		Joint,
+		Joint
+	);
+	map_index!(
+		map_shape,
+		map_shape_mut,
+		add_shape,
+		remove_shape,
+		SHAPE_INDICES,
+		Shape,
+		Shape
+	);
+	map_index!(
+		map_space,
+		map_space_mut,
+		add_space,
+		remove_space,
+		SPACE_INDICES,
+		Space,
+		SpaceHandle
+	);
+
+	// TODO this shouldn't return (), as additional cleanup will be necessary
+	fn remove(self) -> Result<(), IndexError> {
+		match self {
+			Index::Body(index) => {
+				let mut w = BODY_INDICES
+					.write()
+					.expect(&format!("Failed to write-lock {} array", stringify!(Body)));
+				if let Some(element) = w.remove(index) {
+					Ok(())
+				} else {
+					godot_error!("No {} with ID {}", stringify!($name), index);
+					Err(IndexError::NoElement)
+				}
+			}
+			Index::Joint(index) => {
+				let mut w = JOINT_INDICES
+					.write()
+					.expect(&format!("Failed to write-lock {} array", stringify!(Joint)));
+				if let Some(element) = w.remove(index) {
+					Ok(())
+				} else {
+					godot_error!("No {} with ID {}", stringify!($name), index);
+					Err(IndexError::NoElement)
+				}
+			}
+			Index::Shape(index) => {
+				let mut w = SHAPE_INDICES
+					.write()
+					.expect(&format!("Failed to write-lock {} array", stringify!(Shape)));
+				if let Some(element) = w.remove(index) {
+					Ok(())
+				} else {
+					godot_error!("No {} with ID {}", stringify!($name), index);
+					Err(IndexError::NoElement)
+				}
+			}
+			Index::Space(index) => {
+				let mut w = SPACE_INDICES
+					.write()
+					.expect(&format!("Failed to write-lock {} array", stringify!(Space)));
+				if let Some(element) = w.remove(index) {
+					Ok(())
+				} else {
+					godot_error!("No {} with ID {}", stringify!($name), index);
+					Err(IndexError::NoElement)
+				}
+			}
+		}
+	}
+
+	/// Passes a shape to a closure if it exists, otherwise returns an error
+	fn read_shape<F, R>(index: usize, f: F) -> Result<R, IndexError>
+	where
+		F: FnOnce(&Shape) -> R,
+	{
+		let w = SHAPE_INDICES
+			.read()
+			.expect(&format!("Failed to read-lock {} array", stringify!(Shape)));
+		if let Some(element) = w.get(index) {
+			Ok(f(element))
+		} else {
+			godot_error!("No {} with ID {}", stringify!($name), index);
+			Err(IndexError::NoElement)
+		}
+	}
+
+	/// Returns a raw pointer to a boxed index. Care must be taken not to leak it
+	fn raw(self) -> ffi::IndexMut {
+		Box::into_raw(Box::new(self)) as ffi::IndexMut
+	}
+
+	/// Converts a raw pointer into it's boxed equivalent. This is used when freeing resources
+	///
+	/// SAFETY: The pointer must point to a valid boxed Index.
+	unsafe fn from_raw(from: ffi::IndexMut) -> Box<Self> {
+		Box::from_raw(from as *mut Self)
+	}
+
+	/// Copies the Index behind a raw pointer. This is used when accessing resources
+	///
+	/// SAFETY: The pointer must point to a valid boxed Index.
+	unsafe fn copy_raw(from: ffi::Index) -> Self {
+		*(from as *const Self)
+	}
 }
 
-// TODO
-impl fmt::Debug for Index {
-	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let name = match self {
-			Index::None => "None",
-			Index::Space(_) => "Space",
-			Index::Body(_) => "Body",
-			Index::Joint(_) => "Joint",
-			Index::Shape(_) => "Shape",
-		};
-		write!(fmt, "{}", name)
+impl ObjectID {
+	fn new(n: u32) -> Option<Self> {
+		NonZeroU32::new(n).map(Self)
 	}
 }
 
@@ -110,57 +279,6 @@ fn init(ffi: &mut ffi::FFI) {
 	body::init(ffi);
 	space::init(ffi);
 	shape::init(ffi);
-}
-
-fn add_index(index: Index) -> ffi::Index {
-	let mut w = indices_mut!();
-	if let Some(i) = w.1.pop() {
-		assert!(std::matches!(w.0[i as usize], Index::None));
-		w.0[i as usize] = index;
-		i
-	} else {
-		let i = w.0.len().try_into().expect("Too many indices allocated");
-		w.0.push(index);
-		i
-	}
-}
-
-fn modify_index<F>(index: ffi::Index, f: F)
-where
-	F: FnOnce(&mut Index),
-{
-	if indices_mut!().0.get_mut(index as usize).map(f).is_none() {
-		eprintln!("Invalid index {}", index);
-	}
-}
-
-fn read_index<F>(index: ffi::Index, f: F)
-where
-	F: FnOnce(&Index),
-{
-	if indices!().0.get(index as usize).map(f).is_none() {
-		eprintln!("Invalid index {}", index);
-	}
-}
-
-fn remove_index(index: ffi::Index) {
-	let mut w = indices_mut!();
-	let (ref mut indices, ref mut stack) = w.deref_mut();
-	indices
-		.get_mut(index as usize)
-		.and_then(|v| {
-			match v {
-				Index::None => return None,
-				Index::Space(h) => (),
-				Index::Shape(h) => (),
-				Index::Joint(h) => (),
-				Index::Body(h) => (),
-			}
-			*v = Index::None;
-			stack.push(index);
-			Some(())
-		})
-		.or_else(|| Some(eprintln!("Attempt to remove invalid index")));
 }
 
 /// SAFETY: transform must be a valid pointer and must not be freed by the caller
@@ -186,6 +304,6 @@ unsafe extern "C" fn print_sync() {}
 
 unsafe extern "C" fn print_flush_queries() {}
 
-unsafe extern "C" fn free(index: ffi::Index) {
-	remove_index(index);
+unsafe extern "C" fn free(index: ffi::IndexMut) {
+	Index::from_raw(index).remove();
 }

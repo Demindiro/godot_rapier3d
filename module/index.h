@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
-typedef uint32_t index_t;
+typedef struct index const * index_t;
+typedef struct index * index_mut_t;
 
 #endif

@@ -31,7 +31,7 @@ enum StateError {
 }
 
 struct Shape {
-	index: ffi::Index,
+	index: usize,
 	transform: Isometry<f32>,
 	enabled: bool,
 }
@@ -113,10 +113,10 @@ pub fn init(ffi: &mut ffi::FFI) {
 
 unsafe extern "C" fn create(r#type: i32, sleep: bool) -> ffi::Index {
 	if let Ok(r#type) = Type::new(r#type) {
-		add_index(Index::Body(Body::new(r#type)))
+		Index::add_body(Body::new(r#type)).raw()
 	} else {
 		eprintln!("Invalid body type");
-		0
+		core::ptr::null()
 	}
 }
 
@@ -126,56 +126,51 @@ unsafe extern "C" fn add_shape(
 	transform: *const ffi::godot_transform,
 	disabled: bool,
 ) {
-	modify_index(body, |v| {
-		v.map_body_mut(|v| {
+	Index::copy_raw(body).map_body_mut(|v| {
+		if let Index::Shape(index) = Index::copy_raw(shape) {
 			v.shapes.push(Shape {
-				index: shape,
+				index,
 				transform: conv_transform(*transform),
 				enabled: !disabled,
 			})
-		})
+		} else {
+			godot_error!("ID does not point to a shape");
+		}
 	});
 }
 
 unsafe extern "C" fn attach_object_instance_id(body: ffi::Index, id: u32) {
-	modify_index(body, |v| {
-		v.map_body_mut(|v| v.object_id = ObjectID::new(id))
-	});
+	Index::copy_raw(body).map_body_mut(|v| v.object_id = ObjectID::new(id));
 }
 
 unsafe extern "C" fn get_direct_state(body: ffi::Index, state: *mut ffi::body_state) {
-	read_index(body, |body| {
-		body.map_body(|body| {
-			match &body.body {
-				Instance::Attached((body, _), space) => {
-					let transform =
-						crate::get_transform(*space, *body).expect("Invalid body or space");
-					let transform = transform.sys();
-					// SAFETY: sys::godot_transform is the exact same as ffi::godot_transform
-					let transform: *const ffi::godot_transform = mem::transmute(transform);
-					(*state).transform = *transform;
-				}
-				Instance::Loose(_) => {}
+	Index::copy_raw(body).map_body(|body| {
+		match &body.body {
+			Instance::Attached((body, _), space) => {
+				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
+				let transform = transform.sys();
+				// SAFETY: sys::godot_transform is the exact same as ffi::godot_transform
+				let transform: *const ffi::godot_transform = mem::transmute(transform);
+				(*state).transform = *transform;
 			}
-		})
+			Instance::Loose(_) => {}
+		}
 	});
 }
 
 unsafe extern "C" fn remove_shape(body: ffi::Index, shape: i32) {
 	let shape = shape as usize;
-	modify_index(body, |body| {
-		body.map_body_mut(|body| {
-			// TODO this can panic
-			body.shapes.remove(shape);
-			if let Instance::Attached((_, colliders), space) = &mut body.body {
-				crate::modify_space(*space, |space| {
-					// TODO can panic too
-					colliders
-						.remove(shape)
-						.map(|c| space.colliders.remove(c, &mut space.bodies, true));
-				});
-			}
-		});
+	Index::copy_raw(body).map_body_mut(|body| {
+		// TODO this can panic
+		body.shapes.remove(shape);
+		if let Instance::Attached((_, colliders), space) = &mut body.body {
+			crate::modify_space(*space, |space| {
+				// TODO can panic too
+				colliders
+					.remove(shape)
+					.map(|c| space.colliders.remove(c, &mut space.bodies, true));
+			});
+		}
 	});
 }
 
@@ -185,92 +180,76 @@ unsafe extern "C" fn set_shape_transform(
 	transform: *const ffi::godot_transform,
 ) {
 	let shape = shape as usize;
-	modify_index(body, |v| {
-		v.map_body_mut(|v| v.map_shape_mut(shape, |v| v.transform = conv_transform(*transform)))
-	});
+	Index::copy_raw(body)
+		.map_body_mut(|v| v.map_shape_mut(shape, |v| v.transform = conv_transform(*transform)));
 }
 
 unsafe extern "C" fn set_shape_disabled(body: ffi::Index, shape: i32, disable: bool) {
 	let shape = shape as usize;
-	modify_index(body, |v| {
-		v.map_body_mut(|v| v.map_shape_mut(shape, |v| v.enabled = !disable))
-	});
+	Index::copy_raw(body).map_body_mut(|v| v.map_shape_mut(shape, |v| v.enabled = !disable));
 }
 
 unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
-	if space == 0 {
-		modify_index(body, |body| {
-			body.map_body_mut(|body| match body.body {
-				Instance::Attached((body, _), space) => {
-					crate::modify_space(space, |space| {
-						space
-							.bodies
-							.remove(body, &mut space.colliders, &mut space.joints);
-					})
-					.expect("Failed to modify space");
-				}
-				Instance::Loose(_) => todo!(),
-			})
+	let body = Index::copy_raw(body);
+	if space == std::ptr::null() {
+		body.map_body_mut(|body| match body.body {
+			Instance::Attached((body, _), space) => {
+				crate::modify_space(space, |space| {
+					space
+						.bodies
+						.remove(body, &mut space.colliders, &mut space.joints);
+				})
+				.expect("Failed to modify space");
+			}
+			Instance::Loose(_) => todo!(),
 		});
 	} else {
-		let mut sp = None;
-		read_index(space, |v| v.map_space(|&v| sp = Some(v)));
-		if let Some(space) = sp {
+		if let Ok(space) = Index::copy_raw(space).map_space(|&v| v) {
 			// We need to get the shapes now, as the index array will be write locked later
-			let mut colliders = None;
-			read_index(body, |body| {
-				body.map_body(|body| {
-					colliders = Some({
-						let mut colliders = Vec::with_capacity(body.shapes.len());
-						for shape in &body.shapes {
-							if shape.enabled {
-								let transform = shape.transform;
-								read_index(shape.index, |shape| {
-									shape.map_shape(|shape| {
-										let collider = Some(
-											ColliderBuilder::new(shape.shape().clone())
-												.position(transform)
-												.build(),
-										);
-										colliders.push(collider);
-									})
-								})
-							} else {
-								colliders.push(None);
+			let mut colliders = body
+				.map_body(|body| {
+					let mut colliders = Vec::with_capacity(body.shapes.len());
+					for shape in &body.shapes {
+						if shape.enabled {
+							let transform = shape.transform;
+							Index::read_shape(shape.index, |shape| {
+								let collider = Some(
+									ColliderBuilder::new(shape.shape().clone())
+										.position(transform)
+										.build(),
+								);
+								colliders.push(collider);
+							});
+						} else {
+							colliders.push(None);
+						}
+					}
+					colliders
+				})
+				.expect("Body is invalid");
+			body.map_body_mut(|body| {
+				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
+				let b = mem::replace(&mut body.body, b);
+				body.body = match b {
+					Instance::Attached(_, _) => todo!(),
+					Instance::Loose(b) => {
+						let mut handle = None;
+						let mut collider_handles = Vec::with_capacity(colliders.len());
+						crate::modify_space(space, |space| {
+							handle = Some(space.bodies.insert(b));
+							for collider in colliders {
+								let handle = collider.map(|c| {
+									space
+										.colliders
+										.insert(c, handle.unwrap(), &mut space.bodies)
+								});
+								collider_handles.push(handle);
 							}
-						}
-						colliders
-					})
-				})
-			});
-			let mut colliders = colliders.unwrap();
-			modify_index(body, |v| {
-				v.map_body_mut(|body| {
-					let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
-					let b = mem::replace(&mut body.body, b);
-					body.body = match b {
-						Instance::Attached(_, _) => todo!(),
-						Instance::Loose(b) => {
-							let mut handle = None;
-							let mut collider_handles = Vec::with_capacity(colliders.len());
-							crate::modify_space(space, |space| {
-								handle = Some(space.bodies.insert(b));
-								for collider in colliders {
-									let handle = collider.map(|c| {
-										space.colliders.insert(
-											c,
-											handle.unwrap(),
-											&mut space.bodies,
-										)
-									});
-									collider_handles.push(handle);
-								}
-							})
-							.expect("Invalid space");
-							Instance::Attached((handle.unwrap(), collider_handles), space)
-						}
-					};
-				})
+						})
+						.expect("Invalid space");
+						Instance::Attached((handle.unwrap(), collider_handles), space)
+					}
+				};
 			});
 		}
 	}
@@ -296,23 +275,21 @@ unsafe extern "C" fn set_state(body: ffi::Index, state: i32, value: *const ffi::
 		}
 	};
 
-	modify_index(body, |body| {
-		body.map_body_mut(|body| {
-			// SAFETY: sys::godot_variant is the exact same as ffi::godot_variant
-			let value: *const sys::godot_variant = mem::transmute(value);
-			let value = Variant::from_sys(*value);
-			match State::new(state, &value) {
-				Ok(state) => match &mut body.body {
-					Instance::Attached(body, space) => {
-						modify_rigid_body(*space, body.0, |body| apply(body, state))
-							.expect("Invalid body or space")
-					}
-					Instance::Loose(body) => apply(body, state),
-				},
-				Err(e) => eprintln!("Invalid state: {:?}", e),
-			}
-			// The caller still owns the actual Variant. forget() prevents a double free.
-			value.forget();
-		})
+	Index::copy_raw(body).map_body_mut(|body| {
+		// SAFETY: sys::godot_variant is the exact same as ffi::godot_variant
+		let value: *const sys::godot_variant = mem::transmute(value);
+		let value = Variant::from_sys(*value);
+		match State::new(state, &value) {
+			Ok(state) => match &mut body.body {
+				Instance::Attached(body, space) => {
+					modify_rigid_body(*space, body.0, |body| apply(body, state))
+						.expect("Invalid body or space")
+				}
+				Instance::Loose(body) => apply(body, state),
+			},
+			Err(e) => eprintln!("Invalid state: {:?}", e),
+		}
+		// The caller still owns the actual Variant. forget() prevents a double free.
+		value.forget();
 	});
 }

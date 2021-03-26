@@ -108,26 +108,25 @@ unsafe extern "C" fn create(shape: i32) -> ffi::Index {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			add_index(Index::Shape(shape))
+			let w = Index::add_shape(shape).raw();
+			w
 		}
 		Err(e) => {
 			eprintln!("Invalid shape: {:?}", e);
-			0
+			std::ptr::null()
 		}
 	}
 }
 
 unsafe extern "C" fn set_data(shape: ffi::Index, data: *const ffi::godot_variant) {
-	modify_index(shape, |shape| {
-		shape.map_shape_mut(|shape| {
-			// SAFETY: sys::godot_variant and ffi::godot_variant are exactly the same
-			let data: *const sys::godot_variant = mem::transmute(data);
-			let data = Variant::from_sys(*data);
-			if let Err(e) = shape.apply_data(&data) {
-				eprintln!("Failed to apply data: {:?}", e);
-			}
-			// The caller still owns the variant, so forget it to prevent double free
-			data.forget();
-		})
+	Index::copy_raw(shape).map_shape_mut(|shape| {
+		// SAFETY: sys::godot_variant and ffi::godot_variant are exactly the same
+		let data: *const sys::godot_variant = mem::transmute(data);
+		let data = Variant::from_sys(*data);
+		if let Err(e) = shape.apply_data(&data) {
+			eprintln!("Failed to apply data: {:?}", e);
+		}
+		// The caller still owns the variant, so forget it to prevent double free
+		data.forget();
 	});
 }

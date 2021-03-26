@@ -24,7 +24,8 @@ pub struct FFI {
 	table: *mut fn_table,
 }
 
-pub type Index = u32;
+pub type Index = *const index;
+pub type IndexMut = *mut index;
 
 macro_rules! ffi {
 	($fn:ident, $ret:ty) => {
@@ -52,13 +53,13 @@ impl FFI {
 	ffi!(area_set_param, (), Index, i32, *const godot_variant);
 	ffi!(body_create, Index, i32, bool);
 	ffi!(flush_queries, ());
-	ffi!(free, (), Index);
+	ffi!(free, (), IndexMut);
 	ffi!(init, ());
 
 	ffi!(body_attach_object_instance_id, (), Index, u32);
 	ffi!(body_get_direct_state, (), Index, *mut body_state);
 	ffi!(body_remove_shape, (), Index, i32);
-	ffi!(body_set_ray_pickable, (), u32, bool);
+	ffi!(body_set_ray_pickable, (), Index, bool);
 	ffi!(
 		body_add_shape,
 		(),
@@ -79,7 +80,7 @@ impl FFI {
 	ffi!(body_set_state, (), Index, i32, *const godot_variant);
 
 	ffi!(shape_create, Index, i32);
-	ffi!(shape_set_data, (), u32, *const godot_variant);
+	ffi!(shape_set_data, (), Index, *const godot_variant);
 
 	ffi!(space_create, Index);
 	ffi!(space_get_contacts, godot_pool_vector3_array, Index);

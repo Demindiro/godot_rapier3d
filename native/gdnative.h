@@ -11,7 +11,6 @@ typedef godot_object Object;
 typedef godot_string_name StringName;
 typedef godot_pool_vector3_array Vector_Vector3;
 
-typedef godot_object PhysicsDirectBodyState;
 typedef godot_object PhysicsDirectSpaceState;
 
 typedef float real_t;

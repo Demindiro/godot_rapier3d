@@ -3,7 +3,7 @@
 
 #include "fn_table.h"
 #include "index.h"
-#include "rid.h"
+#include "core/rid.h"
 #include "core/hash_map.h"
 #include "servers/physics_server.h"
 #include "body_state.h"
@@ -11,6 +11,21 @@
 // TODO ditto
 #include "gdnative.h"
 //#include "gdnative/gdnative.h"
+
+
+class PluggablePhysicsRID_Data : public RID_Data {
+	friend class PluggablePhysicsServer;
+	index_t index;
+};
+
+
+class PluggablePhysicsIndexHasher {
+public:
+	static _FORCE_INLINE_ uint32_t hash(index_t index) {
+		return (uint32_t)(size_t)index;
+	}
+};
+
 
 class PluggablePhysicsServer : public PhysicsServer {
 	GDCLASS(PluggablePhysicsServer, PhysicsServer);
@@ -39,8 +54,21 @@ class PluggablePhysicsServer : public PhysicsServer {
 	struct fn_table fn_table;
 	GDNative library;
 
-	mutable FastRID_Array rids;
-	HashMap<index_t, Callback> callbacks;
+	mutable RID_Owner<PluggablePhysicsRID_Data> rids;
+	HashMap<index_t, RID, PluggablePhysicsIndexHasher> reverse_rids;
+	HashMap<index_t, Callback, PluggablePhysicsIndexHasher> callbacks;
+
+	_FORCE_INLINE_ RID make_rid(index_t index) {
+		PluggablePhysicsRID_Data *data = memnew(PluggablePhysicsRID_Data);
+		data->index = index;
+		RID rid = this->rids.make_rid(data);
+		this->reverse_rids.set(index, rid);
+		return rid;
+	}
+
+	_FORCE_INLINE_ index_t get_index(RID rid) const {
+		return this->rids.get(rid)->index;
+	}
 
 protected:
 	static void _bind_methods();
