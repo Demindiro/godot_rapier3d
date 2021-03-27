@@ -87,7 +87,13 @@ impl<T> SparseVec<T> {
 	}
 
 	fn remove(&mut self, index: usize) -> Option<T> {
-		self.elements.get_mut(index).map(Option::take).flatten()
+		if index < self.elements.len() {
+			if let Some(element) = self.elements[index].take() {
+				self.empty_slots.push(index);
+				return Some(element);
+			}
+		}
+		None
 	}
 }
 
