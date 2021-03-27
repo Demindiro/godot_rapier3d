@@ -9,7 +9,7 @@ pub struct StaticBody {
 
 #[methods]
 impl StaticBody {
-	fn new(owner: TRef<Spatial>) -> Self {
+	fn new(_owner: TRef<Spatial>) -> Self {
 		Self { body: None }
 	}
 
@@ -22,9 +22,8 @@ impl StaticBody {
 	}
 
 	#[export]
-	fn _exit_tree(&mut self, owner: TRef<Spatial>) {
+	fn _exit_tree(&mut self, _owner: TRef<Spatial>) {
 		let body = self.body.expect("Body handle is None");
-		let world = owner.get_world().expect("Failed to get World");
 		crate::remove_rigid_body(body.1, body.0).expect("Failed to remove body");
 	}
 }

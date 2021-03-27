@@ -53,13 +53,14 @@ impl Type {
 		})
 	}
 
-	fn create_body(&self) -> RigidBody {
+	fn create_body(&self, sleep: bool) -> RigidBody {
 		match self {
 			Type::Static => RigidBodyBuilder::new_static(),
 			Type::Kinematic => RigidBodyBuilder::new_kinematic(),
 			Type::Rigid => RigidBodyBuilder::new_dynamic(),
 			Type::Character => RigidBodyBuilder::new_dynamic(),
 		}
+		.sleeping(sleep)
 		.build()
 	}
 }
@@ -78,9 +79,9 @@ impl State {
 }
 
 impl Body {
-	fn new(r#type: Type) -> Self {
+	fn new(r#type: Type, sleep: bool) -> Self {
 		Self {
-			body: Instance::Loose(r#type.create_body()),
+			body: Instance::Loose(r#type.create_body(sleep)),
 			object_id: None,
 			shapes: Vec::new(),
 		}
@@ -113,7 +114,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 
 unsafe extern "C" fn create(r#type: i32, sleep: bool) -> ffi::Index {
 	if let Ok(r#type) = Type::new(r#type) {
-		Index::add_body(Body::new(r#type)).raw()
+		Index::add_body(Body::new(r#type, sleep)).raw()
 	} else {
 		eprintln!("Invalid body type");
 		core::ptr::null()
@@ -223,7 +224,7 @@ unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
 								);
 								colliders.push(collider);
 							});
-							if let Err(e) = result {
+							if let Err(_) = result {
 								godot_error!("Shape is invalid: {}", shape.index);
 								colliders.push(None); // Make sure the collider count does still match
 							}

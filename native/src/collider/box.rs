@@ -38,7 +38,6 @@ impl Box {
 					}
 					.unwrap()
 					.expect("Parent has no handle");
-					let world = parent.get_world().expect("World is None");
 					let collider =
 						ColliderBuilder::cuboid(self.extents.x, self.extents.y, self.extents.z)
 							.build();
@@ -57,9 +56,8 @@ impl Box {
 	}
 
 	#[export]
-	fn _exit_tree(&mut self, owner: TRef<Spatial>) {
+	fn _exit_tree(&mut self, _owner: TRef<Spatial>) {
 		let collider = self.collider.expect("Collider & body handle is None");
-		let world = owner.get_world().expect("Failed to get World");
 		crate::remove_collider(collider.1, collider.0).expect("Failed to remove collider");
 	}
 }

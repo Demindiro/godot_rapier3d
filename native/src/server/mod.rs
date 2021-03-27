@@ -5,6 +5,7 @@ mod shape;
 mod space;
 
 use crate::*;
+use body::Body;
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
@@ -12,14 +13,15 @@ use core::num::NonZeroU32;
 use core::ops::DerefMut;
 use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
+use shape::Shape;
 use std::io;
 use std::sync::RwLock;
 
 lazy_static::lazy_static! {
 	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());
-	static ref BODY_INDICES: RwLock<SparseVec<body::Body>> = RwLock::new(SparseVec::new());
+	static ref BODY_INDICES: RwLock<SparseVec<Body>> = RwLock::new(SparseVec::new());
 	static ref JOINT_INDICES: RwLock<SparseVec<()>> = RwLock::new(SparseVec::new());
-	static ref SHAPE_INDICES: RwLock<SparseVec<shape::Shape>> = RwLock::new(SparseVec::new());
+	static ref SHAPE_INDICES: RwLock<SparseVec<Shape>> = RwLock::new(SparseVec::new());
 }
 
 struct SparseVec<T> {
@@ -38,6 +40,14 @@ enum Index {
 	Body(usize),
 	Joint(usize),
 	Shape(usize),
+}
+
+/// Used primarily for cleanup, as there is only one generic `free()` function
+enum Type {
+	Space(SpaceHandle),
+	Body(Body),
+	Joint(Joint),
+	Shape(Shape),
 }
 
 #[derive(Debug)]
@@ -132,9 +142,6 @@ macro_rules! map_index {
 	};
 }
 
-use body::Body;
-use shape::Shape;
-
 impl Index {
 	map_index!(
 		map_body,
@@ -174,14 +181,14 @@ impl Index {
 	);
 
 	// TODO this shouldn't return (), as additional cleanup will be necessary
-	fn remove(self) -> Result<(), IndexError> {
+	fn remove(self) -> Result<Type, IndexError> {
 		match self {
 			Index::Body(index) => {
 				let mut w = BODY_INDICES
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Body)));
 				if let Some(element) = w.remove(index) {
-					Ok(())
+					Ok(Type::Body(element))
 				} else {
 					Err(IndexError::NoElement)
 				}
@@ -191,7 +198,7 @@ impl Index {
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Joint)));
 				if let Some(element) = w.remove(index) {
-					Ok(())
+					Ok(Type::Joint(element))
 				} else {
 					Err(IndexError::NoElement)
 				}
@@ -201,7 +208,7 @@ impl Index {
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Shape)));
 				if let Some(element) = w.remove(index) {
-					Ok(())
+					Ok(Type::Shape(element))
 				} else {
 					Err(IndexError::NoElement)
 				}
@@ -211,7 +218,7 @@ impl Index {
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Space)));
 				if let Some(element) = w.remove(index) {
-					Ok(())
+					Ok(Type::Space(element))
 				} else {
 					Err(IndexError::NoElement)
 				}
