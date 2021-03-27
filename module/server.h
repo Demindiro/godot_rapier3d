@@ -67,7 +67,7 @@ class PluggablePhysicsServer : public PhysicsServer {
 	}
 
 	_FORCE_INLINE_ index_t get_index(RID rid) const {
-		return this->rids.get(rid)->index;
+		return rid.is_valid() ? this->rids.get(rid)->index : nullptr;
 	}
 
 protected:

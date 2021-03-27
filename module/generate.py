@@ -130,11 +130,13 @@ def create_server_function(method, ret, args):
         a = a.split()
         (typ, name) = a[-2:]
         if typ == 'RID':
-            # Make sure the RID is valid
-            if ret == 'void':
-                line += f'\tERR_FAIL_COND_MSG(!{name}.is_valid(), "Invalid RID");\n'
-            else:
-                line += f'\tERR_FAIL_COND_V_MSG(!{name}.is_valid(), {err_ret}, "Invalid RID");\n'
+            # Make sure the RID is valid. Only necessary for the first argument, others
+            # may actually be invalid (e.g. unset space for body)
+            if len(params) == 0:
+                if ret == 'void':
+                    line += f'\tERR_FAIL_COND_MSG(!{name}.is_valid(), "Invalid RID");\n'
+                else:
+                    line += f'\tERR_FAIL_COND_V_MSG(!{name}.is_valid(), {err_ret}, "Invalid RID");\n'
             # Get the actual ID
             new_name = name + '_index'
             line += f'\tindex_t {new_name} = this->get_index({name});\n'
