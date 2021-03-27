@@ -1,6 +1,7 @@
 #[macro_use]
 mod ffi;
 mod body;
+mod joint;
 mod shape;
 mod space;
 
@@ -11,6 +12,7 @@ use core::fmt;
 use core::mem;
 use core::num::NonZeroU32;
 use core::ops::DerefMut;
+use joint::Joint;
 use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
 use shape::Shape;
@@ -20,7 +22,7 @@ use std::sync::RwLock;
 lazy_static::lazy_static! {
 	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());
 	static ref BODY_INDICES: RwLock<SparseVec<Body>> = RwLock::new(SparseVec::new());
-	static ref JOINT_INDICES: RwLock<SparseVec<()>> = RwLock::new(SparseVec::new());
+	static ref JOINT_INDICES: RwLock<SparseVec<Joint>> = RwLock::new(SparseVec::new());
 	static ref SHAPE_INDICES: RwLock<SparseVec<Shape>> = RwLock::new(SparseVec::new());
 }
 
@@ -57,8 +59,6 @@ enum IndexError {
 }
 
 struct ObjectID(NonZeroU32);
-
-type Joint = ();
 
 impl<T> SparseVec<T> {
 	fn new() -> Self {
@@ -241,6 +241,21 @@ impl Index {
 		}
 	}
 
+	/// Passes a body to a closure if it exists, otherwise returns an error
+	fn read_body<F, R>(index: usize, f: F) -> Result<R, IndexError>
+	where
+		F: FnOnce(&Body) -> R,
+	{
+		let w = BODY_INDICES
+			.read()
+			.expect(&format!("Failed to read-lock {} array", stringify!(Body)));
+		if let Some(element) = w.get(index) {
+			Ok(f(element))
+		} else {
+			Err(IndexError::NoElement)
+		}
+	}
+
 	/// Returns a raw pointer to a boxed index. Care must be taken not to leak it
 	fn raw(self) -> ffi::IndexMut {
 		Box::into_raw(Box::new(self)) as ffi::IndexMut
@@ -298,6 +313,7 @@ fn init(ffi: &mut ffi::FFI) {
 	ffi.sync(print_sync);
 	ffi.free(free);
 	body::init(ffi);
+	joint::init(ffi);
 	space::init(ffi);
 	shape::init(ffi);
 }

@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=2]
+
+[ext_resource path="res://benchmark/joint/many_chains.gd" type="Script" id=1]
+[ext_resource path="res://benchmark/joint/chain.tscn" type="PackedScene" id=2]
+[ext_resource path="res://benchmark/stats.tscn" type="PackedScene" id=3]
+
+[node name="Node" type="Node"]
+script = ExtResource( 1 )
+chain = ExtResource( 2 )
+
+[node name="Stats" parent="." instance=ExtResource( 3 )]
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( -1, -2.31402e-08, 8.63605e-08, 0, 0.965926, 0.258819, -8.9407e-08, 0.258819, -0.965926, 0, 8, -20 )
+size = 12.8541
+far = 10000.0

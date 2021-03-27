@@ -1,0 +1,21 @@
+[gd_scene load_steps=4 format=2]
+
+[ext_resource path="res://benchmark/boxes/box_godot.tscn" type="PackedScene" id=1]
+[ext_resource path="res://benchmark/joint/chain.gd" type="Script" id=2]
+
+[sub_resource type="BoxShape" id=1]
+
+[node name="Chain" type="Spatial"]
+script = ExtResource( 2 )
+box_scene = ExtResource( 1 )
+length = 5
+offset = 0.5
+
+[node name="Anchor" type="StaticBody" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6 )
+__meta__ = {
+"_edit_group_": true
+}
+
+[node name="CollisionShape" type="CollisionShape" parent="Anchor"]
+shape = SubResource( 1 )

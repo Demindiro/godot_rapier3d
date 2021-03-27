@@ -97,6 +97,14 @@ impl Body {
 			eprintln!("Invalid shape index");
 		}
 	}
+
+	pub fn as_attached(&self) -> Option<(RigidBodyHandle, SpaceHandle)> {
+		if let Instance::Attached(body, space) = &self.body {
+			Some((body.0, *space))
+		} else {
+			None
+		}
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {

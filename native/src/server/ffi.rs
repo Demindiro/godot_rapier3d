@@ -79,6 +79,19 @@ impl FFI {
 	ffi!(body_set_space, (), Index, Index);
 	ffi!(body_set_state, (), Index, i32, *const godot_variant);
 
+	ffi!(hinge_joint_get_flag, bool, Index, i32);
+	ffi!(hinge_joint_get_param, f32, Index, i32);
+	ffi!(hinge_joint_set_flag, (), Index, i32, bool);
+	ffi!(hinge_joint_set_param, (), Index, i32, f32);
+	ffi!(
+		joint_create_hinge,
+		Index,
+		Index,
+		*const godot_transform,
+		Index,
+		*const godot_transform
+	);
+
 	ffi!(shape_create, Index, i32);
 	ffi!(shape_set_data, (), Index, *const godot_variant);
 

@@ -81,6 +81,15 @@ impl World3D {
 	}
 }
 
+impl SpaceHandle {
+	fn modify<F, R>(self, f: F) -> Result<R, ()>
+	where
+		F: FnOnce(&mut World3D) -> R
+	{
+		modify_space(self, f)
+	}
+}
+
 macro_rules! get_spaces {
 	() => {
 		SPACES.read().expect("Failed to read WORLDS")
@@ -176,14 +185,13 @@ fn create_space() -> SpaceHandle {
 	SpaceHandle(index)
 }
 
-fn modify_space<F>(space: SpaceHandle, f: F) -> Result<(), ()>
+fn modify_space<F, R>(space: SpaceHandle, f: F) -> Result<R, ()>
 where
-	F: FnOnce(&mut World3D),
+	F: FnOnce(&mut World3D) -> R,
 {
 	let mut spaces = get_spaces_mut!();
 	let space = spaces.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
-	f(space);
-	Ok(())
+	Ok(f(space))
 }
 
 fn create_world() -> World3D {

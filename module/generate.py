@@ -27,6 +27,16 @@ FN_TABLE_CUSTOM_FUNCTIONS = (
     'void (*free)(index_mut_t id)',
 )
 
+# Functions for which to validate all RIDs
+VALIDATE_ALL_RIDS = {
+    'joint_create_cone_twist',
+    'joint_create_generic_6dof',
+    'joint_create_hinge',
+    'joint_create_pin',
+    'joint_create_slider',
+    'joint_create_hinge_simple',
+}
+
 
 CLASS_NAME = 'PluggablePhysicsServer'
 RID_DATA_NAME = 'PluggablePhysicsRID_Data'
@@ -131,8 +141,9 @@ def create_server_function(method, ret, args):
         (typ, name) = a[-2:]
         if typ == 'RID':
             # Make sure the RID is valid. Only necessary for the first argument, others
-            # may actually be invalid (e.g. unset space for body)
-            if len(params) == 0:
+            # may actually be invalid (e.g. unset space for body). If all RIDs need to be
+            # valid, add the method in VALIDATE_ALL_RIDS
+            if len(params) == 0 or method in VALIDATE_ALL_RIDS:
                 if ret == 'void':
                     line += f'\tERR_FAIL_COND_MSG(!{name}.is_valid(), "Invalid RID");\n'
                 else:
