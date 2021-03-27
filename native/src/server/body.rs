@@ -126,7 +126,7 @@ unsafe extern "C" fn add_shape(
 	transform: *const ffi::godot_transform,
 	disabled: bool,
 ) {
-	Index::copy_raw(body).map_body_mut(|v| {
+	map_or_err!(Index::copy_raw(body), map_body_mut, |v| {
 		if let Index::Shape(index) = Index::copy_raw(shape) {
 			v.shapes.push(Shape {
 				index,
@@ -140,11 +140,12 @@ unsafe extern "C" fn add_shape(
 }
 
 unsafe extern "C" fn attach_object_instance_id(body: ffi::Index, id: u32) {
-	Index::copy_raw(body).map_body_mut(|v| v.object_id = ObjectID::new(id));
+	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v.object_id =
+		ObjectID::new(id));
 }
 
 unsafe extern "C" fn get_direct_state(body: ffi::Index, state: *mut ffi::body_state) {
-	Index::copy_raw(body).map_body(|body| {
+	map_or_err!(Index::copy_raw(body), map_body, |body| {
 		match &body.body {
 			Instance::Attached((body, _), space) => {
 				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
@@ -160,7 +161,7 @@ unsafe extern "C" fn get_direct_state(body: ffi::Index, state: *mut ffi::body_st
 
 unsafe extern "C" fn remove_shape(body: ffi::Index, shape: i32) {
 	let shape = shape as usize;
-	Index::copy_raw(body).map_body_mut(|body| {
+	map_or_err!(Index::copy_raw(body), map_body_mut, |body| {
 		// TODO this can panic
 		body.shapes.remove(shape);
 		if let Instance::Attached((_, colliders), space) = &mut body.body {
@@ -169,7 +170,8 @@ unsafe extern "C" fn remove_shape(body: ffi::Index, shape: i32) {
 				colliders
 					.remove(shape)
 					.map(|c| space.colliders.remove(c, &mut space.bodies, true));
-			});
+			})
+			.expect("Failed to modify space");
 		}
 	});
 }
@@ -180,19 +182,20 @@ unsafe extern "C" fn set_shape_transform(
 	transform: *const ffi::godot_transform,
 ) {
 	let shape = shape as usize;
-	Index::copy_raw(body)
-		.map_body_mut(|v| v.map_shape_mut(shape, |v| v.transform = conv_transform(*transform)));
+	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v
+		.map_shape_mut(shape, |v| v.transform = conv_transform(*transform)));
 }
 
 unsafe extern "C" fn set_shape_disabled(body: ffi::Index, shape: i32, disable: bool) {
 	let shape = shape as usize;
-	Index::copy_raw(body).map_body_mut(|v| v.map_shape_mut(shape, |v| v.enabled = !disable));
+	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v
+		.map_shape_mut(shape, |v| v.enabled = !disable));
 }
 
 unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
 	let body = Index::copy_raw(body);
 	if space == std::ptr::null() {
-		body.map_body_mut(|body| match body.body {
+		map_or_err!(body, map_body_mut, |body| match body.body {
 			Instance::Attached((body, _), space) => {
 				crate::modify_space(space, |space| {
 					space
@@ -206,13 +209,13 @@ unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
 	} else {
 		if let Ok(space) = Index::copy_raw(space).map_space(|&v| v) {
 			// We need to get the shapes now, as the index array will be write locked later
-			let mut colliders = body
+			let colliders = body
 				.map_body(|body| {
 					let mut colliders = Vec::with_capacity(body.shapes.len());
 					for shape in &body.shapes {
 						if shape.enabled {
 							let transform = shape.transform;
-							Index::read_shape(shape.index, |shape| {
+							let result = Index::read_shape(shape.index, |shape| {
 								let collider = Some(
 									ColliderBuilder::new(shape.shape().clone())
 										.position(transform)
@@ -220,6 +223,10 @@ unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
 								);
 								colliders.push(collider);
 							});
+							if let Err(e) = result {
+								godot_error!("Shape is invalid: {}", shape.index);
+								colliders.push(None); // Make sure the collider count does still match
+							}
 						} else {
 							colliders.push(None);
 						}
@@ -227,7 +234,7 @@ unsafe extern "C" fn set_space(body: ffi::Index, space: ffi::Index) {
 					colliders
 				})
 				.expect("Body is invalid");
-			body.map_body_mut(|body| {
+			map_or_err!(body, map_body_mut, |body| {
 				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
 				let b = mem::replace(&mut body.body, b);
 				body.body = match b {
@@ -275,7 +282,7 @@ unsafe extern "C" fn set_state(body: ffi::Index, state: i32, value: *const ffi::
 		}
 	};
 
-	Index::copy_raw(body).map_body_mut(|body| {
+	map_or_err!(Index::copy_raw(body), map_body_mut, |body| {
 		// SAFETY: sys::godot_variant is the exact same as ffi::godot_variant
 		let value: *const sys::godot_variant = mem::transmute(value);
 		let value = Variant::from_sys(*value);

@@ -95,12 +95,9 @@ macro_rules! map_index {
 				if let Some(e) = w.get(index) {
 					Ok(f(e))
 				} else {
-					godot_error!("No {} with ID {}", NAME, index);
 					Err(IndexError::NoElement)
 				}
 			} else {
-				godot_error!("ID is not a {}", NAME);
-				godot_error!("{:?}", self);
 				Err(IndexError::WrongType)
 			}
 		}
@@ -117,20 +114,18 @@ macro_rules! map_index {
 				if let Some(e) = w.get_mut(index) {
 					Ok(f(e))
 				} else {
-					godot_error!("No {} with ID {}", NAME, index);
 					Err(IndexError::NoElement)
 				}
 			} else {
-				godot_error!("ID is not a {}", NAME);
-				godot_error!("{:?}", self);
 				Err(IndexError::WrongType)
 			}
 		}
 
 		fn $fn_add(element: $struct) -> Index {
-			let mut w = $array
-				.write()
-				.expect(&format!("Failed to write-lock {} array", stringify!($variant)));
+			let mut w = $array.write().expect(&format!(
+				"Failed to write-lock {} array",
+				stringify!($variant)
+			));
 			let index = w.add(element);
 			Self::$variant(index)
 		}
@@ -188,7 +183,6 @@ impl Index {
 				if let Some(element) = w.remove(index) {
 					Ok(())
 				} else {
-					godot_error!("No {} with ID {}", stringify!($name), index);
 					Err(IndexError::NoElement)
 				}
 			}
@@ -199,7 +193,6 @@ impl Index {
 				if let Some(element) = w.remove(index) {
 					Ok(())
 				} else {
-					godot_error!("No {} with ID {}", stringify!($name), index);
 					Err(IndexError::NoElement)
 				}
 			}
@@ -210,7 +203,6 @@ impl Index {
 				if let Some(element) = w.remove(index) {
 					Ok(())
 				} else {
-					godot_error!("No {} with ID {}", stringify!($name), index);
 					Err(IndexError::NoElement)
 				}
 			}
@@ -221,7 +213,6 @@ impl Index {
 				if let Some(element) = w.remove(index) {
 					Ok(())
 				} else {
-					godot_error!("No {} with ID {}", stringify!($name), index);
 					Err(IndexError::NoElement)
 				}
 			}
@@ -239,7 +230,6 @@ impl Index {
 		if let Some(element) = w.get(index) {
 			Ok(f(element))
 		} else {
-			godot_error!("No {} with ID {}", stringify!($name), index);
 			Err(IndexError::NoElement)
 		}
 	}
@@ -268,6 +258,30 @@ impl ObjectID {
 	fn new(n: u32) -> Option<Self> {
 		NonZeroU32::new(n).map(Self)
 	}
+}
+
+#[macro_export]
+macro_rules! map_or_err {
+	($index:expr, $func:ident) => {
+		let index = $index;
+		if let Err(e) = index.$func() {
+			use gdnative::prelude::godot_error;
+			match e {
+				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", $index),
+				IndexError::NoElement => godot_error!("No element at ID {:?}", $index),
+			}
+		}
+	};
+	($index:expr, $func:ident, $($args:expr),*) => {
+		let index = $index;
+		if let Err(e) = index.$func($($args)*) {
+			use gdnative::prelude::godot_error;
+			match e {
+				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", $index),
+				IndexError::NoElement => godot_error!("No element at ID {:?}", $index),
+			}
+		}
+	};
 }
 
 fn init(ffi: &mut ffi::FFI) {
@@ -305,5 +319,5 @@ unsafe extern "C" fn print_sync() {}
 unsafe extern "C" fn print_flush_queries() {}
 
 unsafe extern "C" fn free(index: ffi::IndexMut) {
-	Index::from_raw(index).remove();
+	map_or_err!(Index::from_raw(index), remove);
 }

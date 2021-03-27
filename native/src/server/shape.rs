@@ -119,7 +119,7 @@ unsafe extern "C" fn create(shape: i32) -> ffi::Index {
 }
 
 unsafe extern "C" fn set_data(shape: ffi::Index, data: *const ffi::godot_variant) {
-	Index::copy_raw(shape).map_shape_mut(|shape| {
+	map_or_err!(Index::copy_raw(shape), map_shape_mut, |shape| {
 		// SAFETY: sys::godot_variant and ffi::godot_variant are exactly the same
 		let data: *const sys::godot_variant = mem::transmute(data);
 		let data = Variant::from_sys(*data);
