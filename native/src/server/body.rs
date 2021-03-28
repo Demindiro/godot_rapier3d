@@ -120,12 +120,12 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_remove_shape(remove_shape);
 }
 
-fn create(r#type: i32, sleep: bool) -> *const Index {
+fn create(r#type: i32, sleep: bool) -> Option<Index> {
 	if let Ok(r#type) = Type::new(r#type) {
-		Index::add_body(Body::new(r#type, sleep)).raw()
+		Some(Index::add_body(Body::new(r#type, sleep)))
 	} else {
-		eprintln!("Invalid body type");
-		core::ptr::null()
+		godot_error!("Invalid body type");
+		None
 	}
 }
 

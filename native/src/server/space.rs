@@ -5,8 +5,8 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.space_set_active(set_active);
 }
 
-fn create() -> *const Index {
-	Index::add_space(crate::create_space()).raw()
+fn create() -> Option<Index> {
+	Some(Index::add_space(crate::create_space()))
 }
 
 fn set_active(index: Index, active: bool) {

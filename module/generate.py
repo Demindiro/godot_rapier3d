@@ -220,6 +220,9 @@ def clean_method_table(table):
                 n = n[1:]
             t = physics_type_map_c.get(t, t)
             args[i] = (t, n, c)
+        # Presumably all API methods can fail somehow, thus RID can be null
+        if ret == 'index_t':
+            ret = 'maybe_index_t'
         table[method] = (ret, args, const)
 
 

@@ -49,12 +49,13 @@ fn generate_struct(api: &json::JsonValue) -> TokenStream {
 
 		let method = format_ident!("{}", method);
 		let ret = map_type(ret_type);
+		let ret_safe = map_type_safe(ret_type);
 		methods_unsafe.extend(quote! {
 			#method: Option<unsafe extern "C" fn(#args_unsafe) -> #ret>,
 		});
 
 		methods_safe.extend(quote! {
-			#method: Option<fn(#args_safe) -> #ret>,
+			#method: Option<fn(#args_safe) -> #ret_safe>,
 		});
 	}
 	quote!{
@@ -105,17 +106,25 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 		}
 		let method = format_ident!("{}", method);
 		let ret = map_type(ret_type);
+		let ret_safe = map_type_safe(ret_type);
 		let wrap_method = format_ident!("wrap_{}", method);
 		let default_ret = default_value_for_type(ret_type);
+		let (ret_wrap_pre, ret_wrap_post) = if ret_type == "maybe_index_t" {
+			(quote!(if let Some(r) = ), quote!({ r.raw() } else { ptr::null() }))
+		} else if ret_type == "index_t" {
+			(quote!(), quote!(.raw()))
+		} else {
+			(quote!(), quote!())
+		};
 		methods.extend(quote! {
-			pub fn #method(&mut self, f: fn(#params_safe) -> #ret) {
+			pub fn #method(&mut self, f: fn(#params_safe) -> #ret_safe) {
 				unsafe extern "C" fn wrap(#params) -> #ret {
 					let w = WRAPPERS.read().expect("Failed to add method");
 					if let Some(m) = w.#method {
 						#convert_from_sys
 						let r = m(#args);
 						#forget
-						r
+						#ret_wrap_pre r #ret_wrap_post
 					} else {
 						//godot_error!("Method {} is not set", stringify!(#method));
 						#default_ret
@@ -166,6 +175,34 @@ fn map_type(t: &str) -> TokenStream {
 	};
 	if ptr {
 		let mut ptr = if cons { quote!(*const) } else { quote!(*mut) };
+		ptr.extend(t);
+		ptr
+	} else {
+		t
+	}
+}
+
+
+fn map_type_safe(t: &str) -> TokenStream {
+	let (t, ptr) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let mut cons = t != "godot_object";
+	let t = match t {
+		"index_t" => quote!(Index),
+		"index_mut_t" => quote!(Box<Index>),
+		"maybe_index_t" => quote!(Option<Index>),
+		"void" => quote!(()),
+		"uint32_t" => quote!(u32),
+		"int" => quote!(i32),
+		"bool" => quote!(bool),
+		"float" => quote!(f32),
+		"physics_body_state_mut_t" => quote!(&mut PhysicsBodyState),
+		"physics_space_state_mut_t" => quote!(&mut PhysicsSpaceState),
+		"physics_area_monitor_event_mut_t" => quote!(&mut AreaMonitorEvent),
+		_ if t.starts_with("godot_") => format!("gdnative::sys::{}", t).parse().unwrap(),
+		_ => panic!("Unhandled type: {}", t),
+	};
+	if ptr {
+		let mut ptr = if cons { quote!(&) } else { quote!(&mut) };
 		ptr.extend(t);
 		ptr
 	} else {

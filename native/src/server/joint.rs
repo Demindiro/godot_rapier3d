@@ -64,19 +64,19 @@ fn create_hinge(
 	transform_a: &Transform,
 	body_b: Index,
 	transform_b: &Transform,
-) -> *const Index {
+) -> Option<Index> {
 
 	let body_a = if let Index::Body(index) = body_a {
 		index
 	} else {
 		godot_error!("ID A does not point to a body");
-		return core::ptr::null();
+		return None;
 	};
 	let body_b = if let Index::Body(index) = body_b {
 		index
 	} else {
 		godot_error!("ID B does not point to a body");
-		return core::ptr::null();
+		return None;
 	};
 
 	let origin_a = transform_a.origin;
@@ -103,5 +103,5 @@ fn create_hinge(
 	joint.basis1 = basis_a;
 	joint.basis2 = basis_b;
 
-	Index::add_joint(Joint::new(joint, body_a, body_b)).raw()
+	Some(Index::add_joint(Joint::new(joint, body_a, body_b)))
 }

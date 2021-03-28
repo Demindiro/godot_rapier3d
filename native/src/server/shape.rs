@@ -104,16 +104,15 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.shape_set_data(set_data);
 }
 
-fn create(shape: i32) -> *const Index {
+fn create(shape: i32) -> Option<Index> {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			let w = Index::add_shape(shape).raw();
-			w
+			Some(Index::add_shape(shape))
 		}
 		Err(e) => {
 			eprintln!("Invalid shape: {:?}", e);
-			std::ptr::null()
+			None
 		}
 	}
 }
