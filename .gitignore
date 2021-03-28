@@ -5,6 +5,6 @@ lib/
 logs/
 module/api.json
 module/api.gen.h
-module/server_gen.cpp
+module/server.gen.cpp
 __pycache__/
 *.o
