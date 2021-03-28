@@ -1,5 +1,5 @@
-use proc_macro2::{TokenStream, Ident};
-use quote::{quote, IdentFragment, TokenStreamExt, format_ident, ToTokens};
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote, IdentFragment, ToTokens, TokenStreamExt};
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -15,15 +15,15 @@ fn main() {
 	file.read_to_string(&mut api).expect("Failed to read API");
 	drop(file);
 	let api = json::parse(&api).expect("Failed to parse API");
-	
+
 	let mut bindings = generate_struct(&api);
 	bindings.extend(generate_impl(&api));
 
 	let out = PathBuf::from(env::var("OUT_DIR").unwrap()).join("ffi.rs");
 	let mut out = File::create(out).expect("Failed to create bindings");
-	out.write(bindings.to_string().as_bytes()).expect("Failed to write bindings!");
+	out.write(bindings.to_string().as_bytes())
+		.expect("Failed to write bindings!");
 }
-
 
 fn generate_struct(api: &json::JsonValue) -> TokenStream {
 	let mut methods_unsafe = TokenStream::new();
@@ -58,7 +58,7 @@ fn generate_struct(api: &json::JsonValue) -> TokenStream {
 			#method: Option<fn(#args_safe) -> #ret_safe>,
 		});
 	}
-	quote!{
+	quote! {
 		#[repr(C)]
 		pub struct UnsafeApi {
 			#methods_unsafe
@@ -69,7 +69,6 @@ fn generate_struct(api: &json::JsonValue) -> TokenStream {
 		}
 	}
 }
-
 
 fn generate_impl(api: &json::JsonValue) -> TokenStream {
 	let mut methods = TokenStream::new();
@@ -140,7 +139,7 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 		});
 		methods_none.extend(quote!(#method: None,));
 	}
-	quote!{
+	quote! {
 		use std::sync::RwLock;
 		use gdnative::prelude::*;
 		use core::ptr;
@@ -155,9 +154,12 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 	}
 }
 
-
 fn map_type(t: &str) -> TokenStream {
-	let (t, ptr) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let (t, ptr) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	let mut cons = t != "godot_object";
 	let t = match t {
 		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(u64),
@@ -181,9 +183,12 @@ fn map_type(t: &str) -> TokenStream {
 	}
 }
 
-
 fn map_type_safe(t: &str) -> TokenStream {
-	let (t, ptr) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let (t, ptr) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	let mut cons = t != "godot_object";
 	let t = match t {
 		"index_t" | "index_mut_t" => quote!(Index),
@@ -209,7 +214,11 @@ fn map_type_safe(t: &str) -> TokenStream {
 }
 
 fn default_value_for_type(t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let (t, _) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	match t {
 		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(0),
 		"void" => quote!(()),
@@ -221,7 +230,11 @@ fn default_value_for_type(t: &str) -> TokenStream {
 		"physics_space_state_mut_t" => quote!(ptr::null()),
 		"physics_area_monitor_event_mut_t" => quote!(ptr::null()),
 		"godot_variant" => quote!(Variant::new().to_sys()),
-		"godot_transform" => quote!(*Transform { basis: Basis::identity(), origin: Vector3::zero() }.sys()),
+		"godot_transform" => quote!(*Transform {
+			basis: Basis::identity(),
+			origin: Vector3::zero()
+		}
+		.sys()),
 		"godot_vector3" => quote!(Vector3::zero().to_sys()),
 		"godot_pool_vector3_array" => quote!(*TypedArray::<Vector3>::new().sys()),
 		_ => panic!("Unhandled type: {}", t),
@@ -229,7 +242,11 @@ fn default_value_for_type(t: &str) -> TokenStream {
 }
 
 fn convert_type_to_sys(name: &TokenStream, t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let (t, _) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	match t {
 		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(0),
 		"void" => quote!(()),
@@ -241,28 +258,47 @@ fn convert_type_to_sys(name: &TokenStream, t: &str) -> TokenStream {
 		"physics_space_state_mut_t" => quote!(ptr::null()),
 		"physics_area_monitor_event_mut_t" => quote!(ptr::null()),
 		"godot_variant" => quote!(Variant::new().to_sys()),
-		"godot_transform" => quote!(*Transform { basis: Basis::identity(), origin: Vector3::zero() }.sys()),
+		"godot_transform" => quote!(*Transform {
+			basis: Basis::identity(),
+			origin: Vector3::zero()
+		}
+		.sys()),
 		"godot_vector3" => quote!(Vector3::zero().to_sys()),
 		"godot_pool_vector3_array" => quote!(*TypedArray::<Vector3>::new().sys()),
 		_ => panic!("Unhandled type: {}", t),
 	}
 }
 
-fn convert_type_from_sys(name:  &TokenStream, t: &str) -> (TokenStream, bool) {
-	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+fn convert_type_from_sys(name: &TokenStream, t: &str) -> (TokenStream, bool) {
+	let (t, _) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	let mut r = quote!(let #name =);
 	let t = match t {
-		"index_t" | "index_mut_t" => (quote!(Index::from_raw(#name).expect("Invalid index")), false),
-		"maybe_index_t" => (quote!(if #name == 0 { None } else { Some(Index::from_raw(#name).expect("Invalid index")) }), false),
+		"index_t" | "index_mut_t" => (
+			quote!(Index::from_raw(#name).expect("Invalid index")),
+			false,
+		),
+		"maybe_index_t" => (
+			quote!(if #name == 0 { None } else { Some(Index::from_raw(#name).expect("Invalid index")) }),
+			false,
+		),
 		"void" => (quote!(()), false),
 		"uint32_t" | "int" | "bool" | "float" => (quote!(#name), false),
-		"physics_body_state_mut_t" | "physics_space_state_mut_t" | "physics_area_monitor_event_mut_t" => (quote!(&mut *#name), false),
+		"physics_body_state_mut_t"
+		| "physics_space_state_mut_t"
+		| "physics_area_monitor_event_mut_t" => (quote!(&mut *#name), false),
 		"godot_variant" => (quote!(Variant::from_sys(*#name)), true),
 		"godot_transform" => (quote!(&Transform::from_sys(*#name)), false),
 		"godot_vector3" => (quote!(Vector3::from_sys(*#name)), false),
 		"godot_pool_vector3_array" => (quote!(TypedArray::<Vector3>::from_sys(#name)), false),
 		// FIXME new or new_unchecked? (NonNull)
-		"godot_object" => (quote!(Ref::from_sys(ptr::NonNull::new_unchecked(#name))), false),
+		"godot_object" => (
+			quote!(Ref::from_sys(ptr::NonNull::new_unchecked(#name))),
+			false,
+		),
 		_ => panic!("Unhandled type: {}", t),
 	};
 	r.extend(t.0);
@@ -270,7 +306,11 @@ fn convert_type_from_sys(name:  &TokenStream, t: &str) -> (TokenStream, bool) {
 }
 
 fn get_type_from_sys(t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
+	let (t, _) = if t.ends_with(" *") {
+		(&t[..t.len() - 2], true)
+	} else {
+		(t, false)
+	};
 	match t {
 		"index_t" => quote!(Index),
 		"index_mut_t" => quote!(Index),

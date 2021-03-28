@@ -12,13 +12,13 @@ use core::fmt;
 use core::mem;
 use core::num::NonZeroU32;
 use core::ops::DerefMut;
+use gdnative::sys;
 use joint::Joint;
 use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
 use shape::Shape;
 use std::io;
 use std::sync::RwLock;
-use gdnative::sys;
 
 lazy_static::lazy_static! {
 	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());

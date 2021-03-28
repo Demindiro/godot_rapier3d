@@ -28,9 +28,19 @@ impl Joint {
 				if let Some((body_a, space_a)) = body_a.as_attached() {
 					if let Some((body_b, space_b)) = body_b.as_attached() {
 						if space_a == space_b {
-							return Some((space_a.modify(|space| {
-								space.joints.insert(&mut space.bodies, body_a, body_b, joint)
-							}).expect("Invalid space"), space_a));
+							return Some((
+								space_a
+									.modify(|space| {
+										space.joints.insert(
+											&mut space.bodies,
+											body_a,
+											body_b,
+											joint,
+										)
+									})
+									.expect("Invalid space"),
+								space_a,
+							));
 						} else {
 							godot_error!("Bodies are in different spaces");
 						}
@@ -65,7 +75,6 @@ fn create_hinge(
 	body_b: Index,
 	transform_b: &Transform,
 ) -> Option<Index> {
-
 	let body_a = if let Index::Body(index) = body_a {
 		index
 	} else {

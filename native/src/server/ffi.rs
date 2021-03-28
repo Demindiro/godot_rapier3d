@@ -9,10 +9,6 @@ include!(concat!(env!("OUT_DIR"), "/ffi.rs"));
 
 use gdnative::sys;
 
-
-
-
-
 #[repr(C)]
 pub struct PhysicsBodyState {
 	pub transform: sys::godot_transform,
@@ -23,7 +19,6 @@ pub struct PhysicsSpaceState {}
 
 #[repr(C)]
 pub struct AreaMonitorEvent {}
-
 
 #[macro_export]
 macro_rules! gdphysics_init {

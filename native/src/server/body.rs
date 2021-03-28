@@ -129,12 +129,7 @@ fn create(r#type: i32, sleep: bool) -> Option<Index> {
 	}
 }
 
-fn add_shape(
-	body: Index,
-	shape: Index,
-	transform: &Transform,
-	disabled: bool,
-) {
+fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 	map_or_err!(body, map_body_mut, |v| {
 		if let Index::Shape(index) = shape {
 			v.shapes.push(Shape {
@@ -149,8 +144,7 @@ fn add_shape(
 }
 
 fn attach_object_instance_id(body: Index, id: u32) {
-	map_or_err!(body, map_body_mut, |v| v.object_id =
-		ObjectID::new(id));
+	map_or_err!(body, map_body_mut, |v| v.object_id = ObjectID::new(id));
 }
 
 fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
@@ -185,14 +179,11 @@ fn remove_shape(body: Index, shape: i32) {
 	});
 }
 
-fn set_shape_transform(
-	body: Index,
-	shape: i32,
-	transform: &Transform,
-) {
+fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |v| v
-		.map_shape_mut(shape, |v| v.transform = transform_to_isometry(*transform)));
+		.map_shape_mut(shape, |v| v.transform =
+			transform_to_isometry(*transform)));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {

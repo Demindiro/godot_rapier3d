@@ -6,6 +6,7 @@ use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
 use rapier3d::na::{Dynamic, Matrix, Matrix3x1};
 
+#[derive(Debug)]
 enum Type {
 	Plane,
 	Ray,
@@ -53,27 +54,42 @@ enum ShapeError {
 
 impl Shape {
 	fn new(r#type: Type) -> Self {
+		let p = |x, y, z| Point::new(x, y, z);
+		// We need something for triangle shapes I suppose, so have a pyramid
+		let pyramid = (
+			[
+				p(1.0, 0.0, 1.0),
+				p(1.0, 0.0, -1.0),
+				p(-1.0, 0.0, -1.0),
+				p(-1.0, 0.0, 1.0),
+				p(0.0, 1.0, 0.0),
+			],
+			[
+				[0, 1, 2],
+				[2, 3, 0],
+				[0, 1, 4],
+				[1, 2, 4],
+				[2, 3, 4],
+				[3, 0, 4],
+			],
+		);
 		let shape = match r#type {
 			// TODO will this work as expected?
 			Type::Plane => SharedShape::cuboid(1.0, 0.0, 1.0),
 			Type::Ray => {
 				// TODO ditto?
-				SharedShape::capsule(Point::new(0.0, 1.0, 0.0), Point::new(0.0, -1.0, 0.0), 0.0)
+				SharedShape::capsule(p(0.0, 1.0, 0.0), p(0.0, 0.0, 0.0), 0.0)
 			}
 			Type::Sphere => SharedShape::ball(1.0),
 			Type::Box => SharedShape::cuboid(1.0, 1.0, 1.0),
-			Type::Capsule => {
-				SharedShape::capsule(Point::new(0.0, 1.0, 0.0), Point::new(0.0, -1.0, 0.0), 1.0)
-			}
+			Type::Capsule => SharedShape::capsule(p(0.0, 1.0, 0.0), p(0.0, -1.0, 0.0), 1.0),
 			Type::Cylinder => SharedShape::cylinder(1.0, 1.0),
-			// TODO do this panic-free
-			Type::Convex => {
-				SharedShape::convex_mesh(Vec::new(), &[]).expect("Failed to create convex mesh")
-			}
+			Type::Convex => SharedShape::convex_mesh(Vec::from(pyramid.0), &pyramid.1)
+				.expect("Failed to create convex mesh"),
 			// TODO check if this is the correct equivalent
-			Type::Concave => SharedShape::trimesh(Vec::new(), Vec::new()),
+			Type::Concave => SharedShape::trimesh(Vec::from(pyramid.0), Vec::from(pyramid.1)),
 			Type::Heightmap => SharedShape::heightfield(
-				Matrix::<_, Dynamic, Dynamic, _>::zeros(1, 1),
+				Matrix::<_, Dynamic, Dynamic, _>::zeros(2, 2),
 				Matrix3x1::new(1.0, 1.0, 1.0),
 			),
 		};
@@ -81,17 +97,67 @@ impl Shape {
 	}
 
 	fn apply_data(&mut self, data: &Variant) -> Result<(), ShapeError> {
-		match self.r#type {
-			Type::Box => {
-				if let Some(extents) = data.try_to_vector3() {
-					self.shape = SharedShape::cuboid(extents.x, extents.y, extents.z);
-					Ok(())
-				} else {
-					Err(ShapeError::InvalidData)
-				}
-			}
-			_ => todo!(),
+		let p = |x, y, z| Point::new(x, y, z);
+		fn e<T>(r: Option<T>) -> Result<T, ShapeError> {
+			r.ok_or(ShapeError::InvalidData)
 		}
+		let dict = || e(data.try_to_dictionary());
+		let get_f = |d: &Dictionary, k| Ok(e(d.get(k).try_to_f64())? as f32);
+		let get_i = |d: &Dictionary, k| e(d.get(k).try_to_i64());
+		self.shape = match self.r#type {
+			Type::Box => {
+				let extents = e(data.try_to_vector3())?;
+				SharedShape::cuboid(extents.x, extents.y, extents.z)
+			}
+			Type::Ray => {
+				let data = dict()?;
+				let length = get_f(&data, "length")?;
+				// TODO Ditto
+				// TODO There is a second paramater in the data that is currently unused
+				SharedShape::capsule(p(0.0, length, 0.0), p(0.0, 0.0, 0.0), 0.0)
+			}
+			Type::Capsule => {
+				let data = dict()?;
+				let height = get_f(&data, "height")?;
+				let radius = get_f(&data, "radius")?;
+				// TODO Ditto
+				SharedShape::capsule(p(0.0, height, 0.0), p(0.0, 0.0, 0.0), radius)
+			}
+			Type::Cylinder => {
+				let data = dict()?;
+				let height = get_f(&data, "height")?;
+				let radius = get_f(&data, "radius")?;
+				SharedShape::cylinder(height, radius)
+			}
+			Type::Heightmap => {
+				let data = dict()?;
+				let depth = get_i(&data, "depth")? as usize;
+				let width = get_i(&data, "width")? as usize;
+				let heights = e(data.get("heights").try_to_float32_array())?;
+				let heights = heights.read();
+				// TODO there are max_height and min_height, what are they for?
+				let mut map = Matrix::<_, Dynamic, Dynamic, _>::zeros(depth, width);
+				for x in 0..width {
+					for z in 0..depth {
+						map[(x, z)] = heights[x * depth + z];
+					}
+				}
+				SharedShape::heightfield(map, na::Vector3::new(1.0, 1.0, 1.0))
+			}
+			Type::Plane => {
+				// TODO figure out a way to implement planes
+				let plane = e(data.try_to_plane())?;
+				let _ = plane;
+				godot_error!("Planes are not implemented yet");
+				SharedShape::cuboid(1.0, 0.0, 1.0)
+			}
+			Type::Sphere => {
+				let radius = e(data.try_to_f64())? as f32;
+				SharedShape::ball(radius)
+			}
+			_ => panic!("Handle {:?} - {:?}", self.r#type, data),
+		};
+		Ok(())
 	}
 
 	pub fn shape(&self) -> &SharedShape {

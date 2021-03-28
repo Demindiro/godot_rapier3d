@@ -87,7 +87,7 @@ impl World3D {
 impl SpaceHandle {
 	fn modify<F, R>(self, f: F) -> Result<R, ()>
 	where
-		F: FnOnce(&mut World3D) -> R
+		F: FnOnce(&mut World3D) -> R,
 	{
 		modify_space(self, f)
 	}

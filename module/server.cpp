@@ -109,6 +109,7 @@ void PluggablePhysicsServer::body_set_force_integration_callback(RID body, Objec
 void PluggablePhysicsServer::free(RID rid) {
 	ERR_FAIL_COND_MSG(this->fn_table.free == nullptr, "Not implemented");
 	index_t id = this->get_index(rid);
+	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
 	this->rids.free(rid);
 	this->reverse_rids.erase(id);
 	this->callbacks.erase(id);
