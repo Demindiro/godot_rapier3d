@@ -292,22 +292,22 @@ impl ObjectID {
 #[macro_export]
 macro_rules! map_or_err {
 	($index:expr, $func:ident) => {
-		let index = $index;
+		let index = &$index;
 		if let Err(e) = index.$func() {
 			use gdnative::prelude::godot_error;
 			match e {
-				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", $index),
-				IndexError::NoElement => godot_error!("No element at ID {:?}", $index),
+				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
+				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
 			}
 		}
 	};
 	($index:expr, $func:ident, $($args:expr),*) => {
-		let index = $index;
+		let index = &$index;
 		if let Err(e) = index.$func($($args)*) {
 			use gdnative::prelude::godot_error;
 			match e {
-				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", $index),
-				IndexError::NoElement => godot_error!("No element at ID {:?}", $index),
+				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
+				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
 			}
 		}
 	};
@@ -315,9 +315,9 @@ macro_rules! map_or_err {
 
 fn init(ffi: &mut ffi::FFI) {
 	ffi.init(print_init);
-	ffi.flush_queries(print_flush_queries);
+	ffi.flush_queries(flush_queries);
 	ffi.step(step);
-	ffi.sync(print_sync);
+	ffi.sync(sync);
 	ffi.free(free);
 	body::init(ffi);
 	joint::init(ffi);
@@ -336,18 +336,18 @@ unsafe fn conv_transform(transform: sys::godot_transform) -> Isometry<f32> {
 
 gdphysics_init!(init);
 
-unsafe extern "C" fn print_init() {
+fn print_init() {
 	println!("RUST MODULES LIVE! *stomp stomp*");
 }
 
-unsafe extern "C" fn step(delta: f32) {
+fn step(delta: f32) {
 	crate::step_all_spaces(delta);
 }
 
-unsafe extern "C" fn print_sync() {}
+fn sync() {}
 
-unsafe extern "C" fn print_flush_queries() {}
+fn flush_queries() {}
 
-unsafe extern "C" fn free(index: *mut Index) {
-	map_or_err!(Index::from_raw(index), remove);
+fn free(index: Box<Index>) {
+	map_or_err!(index, remove);
 }

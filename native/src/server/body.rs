@@ -120,7 +120,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_remove_shape(remove_shape);
 }
 
-unsafe extern "C" fn create(r#type: i32, sleep: bool) -> *const Index {
+fn create(r#type: i32, sleep: bool) -> *const Index {
 	if let Ok(r#type) = Type::new(r#type) {
 		Index::add_body(Body::new(r#type, sleep)).raw()
 	} else {
@@ -129,17 +129,17 @@ unsafe extern "C" fn create(r#type: i32, sleep: bool) -> *const Index {
 	}
 }
 
-unsafe extern "C" fn add_shape(
-	body: *const Index,
-	shape: *const Index,
-	transform: *const sys::godot_transform,
+fn add_shape(
+	body: Index,
+	shape: Index,
+	transform: &Transform,
 	disabled: bool,
 ) {
-	map_or_err!(Index::copy_raw(body), map_body_mut, |v| {
-		if let Index::Shape(index) = Index::copy_raw(shape) {
+	map_or_err!(body, map_body_mut, |v| {
+		if let Index::Shape(index) = shape {
 			v.shapes.push(Shape {
 				index,
-				transform: conv_transform(*transform),
+				transform: transform_to_isometry(*transform),
 				enabled: !disabled,
 			})
 		} else {
@@ -148,29 +148,29 @@ unsafe extern "C" fn add_shape(
 	});
 }
 
-unsafe extern "C" fn attach_object_instance_id(body: *const Index, id: u32) {
-	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v.object_id =
+fn attach_object_instance_id(body: Index, id: u32) {
+	map_or_err!(body, map_body_mut, |v| v.object_id =
 		ObjectID::new(id));
 }
 
-unsafe extern "C" fn get_direct_state(body: *const Index, state: *mut ffi::PhysicsBodyState) {
-	map_or_err!(Index::copy_raw(body), map_body, |body| {
+fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
+	map_or_err!(body, map_body, |body| {
 		match &body.body {
 			Instance::Attached((body, _), space) => {
 				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
-				let transform = transform.sys();
-				// SAFETY: sys::godot_transform is the exact same as sys::godot_transform
-				let transform: *const sys::godot_transform = mem::transmute(transform);
-				(*state).transform = *transform;
+				// FIXME make this safe
+				unsafe {
+					state.transform = *transform.sys();
+				}
 			}
 			Instance::Loose(_) => {}
 		}
 	});
 }
 
-unsafe extern "C" fn remove_shape(body: *const Index, shape: i32) {
+fn remove_shape(body: Index, shape: i32) {
 	let shape = shape as usize;
-	map_or_err!(Index::copy_raw(body), map_body_mut, |body| {
+	map_or_err!(body, map_body_mut, |body| {
 		// TODO this can panic
 		body.shapes.remove(shape);
 		if let Instance::Attached((_, colliders), space) = &mut body.body {
@@ -185,38 +185,25 @@ unsafe extern "C" fn remove_shape(body: *const Index, shape: i32) {
 	});
 }
 
-unsafe extern "C" fn set_shape_transform(
-	body: *const Index,
+fn set_shape_transform(
+	body: Index,
 	shape: i32,
-	transform: *const sys::godot_transform,
+	transform: &Transform,
 ) {
 	let shape = shape as usize;
-	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v
-		.map_shape_mut(shape, |v| v.transform = conv_transform(*transform)));
+	map_or_err!(body, map_body_mut, |v| v
+		.map_shape_mut(shape, |v| v.transform = transform_to_isometry(*transform)));
 }
 
-unsafe extern "C" fn set_shape_disabled(body: *const Index, shape: i32, disable: bool) {
+fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
 	let shape = shape as usize;
-	map_or_err!(Index::copy_raw(body), map_body_mut, |v| v
+	map_or_err!(body, map_body_mut, |v| v
 		.map_shape_mut(shape, |v| v.enabled = !disable));
 }
 
-unsafe extern "C" fn set_space(body: *const Index, space: *const Index) {
-	let body = Index::copy_raw(body);
-	if space == std::ptr::null() {
-		map_or_err!(body, map_body_mut, |body| match body.body {
-			Instance::Attached((body, _), space) => {
-				crate::modify_space(space, |space| {
-					space
-						.bodies
-						.remove(body, &mut space.colliders, &mut space.joints);
-				})
-				.expect("Failed to modify space");
-			}
-			Instance::Loose(_) => todo!(),
-		});
-	} else {
-		if let Ok(space) = Index::copy_raw(space).map_space(|&v| v) {
+fn set_space(body: Index, space: Option<Index>) {
+	if let Some(space) = space {
+		if let Ok(space) = space.map_space(|&v| v) {
 			// We need to get the shapes now, as the index array will be write locked later
 			let colliders = body
 				.map_body(|body| {
@@ -268,15 +255,27 @@ unsafe extern "C" fn set_space(body: *const Index, space: *const Index) {
 				};
 			});
 		}
+	} else {
+		map_or_err!(body, map_body_mut, |body| match body.body {
+			Instance::Attached((body, _), space) => {
+				crate::modify_space(space, |space| {
+					space
+						.bodies
+						.remove(body, &mut space.colliders, &mut space.joints);
+				})
+				.expect("Failed to modify space");
+			}
+			Instance::Loose(_) => todo!(),
+		});
 	}
 }
 
-unsafe extern "C" fn set_ray_pickable(body: *const Index, enable: bool) {
+fn set_ray_pickable(body: Index, enable: bool) {
 	// TODO IIRC there is no equivalent in Rapier3D, unless I misunderstand the purpose of this function
 	let _ = (body, enable);
 }
 
-unsafe extern "C" fn set_state(body: *const Index, state: i32, value: *const sys::godot_variant) {
+fn set_state(body: Index, state: i32, value: &Variant) {
 	let apply = |body: &mut RigidBody, state| match state {
 		State::Transform(trf) => body.set_position(transform_to_isometry(trf), true),
 		State::LinearVelocity(vel) => body.set_linvel(vec_gd_to_na(vel), true),
@@ -291,11 +290,8 @@ unsafe extern "C" fn set_state(body: *const Index, state: i32, value: *const sys
 		}
 	};
 
-	map_or_err!(Index::copy_raw(body), map_body_mut, |body| {
-		// SAFETY: sys::godot_variant is the exact same as sys::godot_variant
-		let value: *const sys::godot_variant = mem::transmute(value);
-		let value = Variant::from_sys(*value);
-		match State::new(state, &value) {
+	map_or_err!(body, map_body_mut, |body| {
+		match State::new(state, value) {
 			Ok(state) => match &mut body.body {
 				Instance::Attached(body, space) => {
 					modify_rigid_body(*space, body.0, |body| apply(body, state))
@@ -305,7 +301,5 @@ unsafe extern "C" fn set_state(body: *const Index, state: i32, value: *const sys
 			},
 			Err(e) => eprintln!("Invalid state: {:?}", e),
 		}
-		// The caller still owns the actual Variant. forget() prevents a double free.
-		value.forget();
 	});
 }

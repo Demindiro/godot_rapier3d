@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+typedef const struct index * maybe_index_t;
 typedef const struct index * index_t;
 typedef struct index * index_mut_t;
 

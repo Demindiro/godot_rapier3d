@@ -35,6 +35,11 @@ API_EXCLUDE = {
     'space_get_direct_state',
 }
 
+# Functions where some RIDs may be null
+API_MAYBE_RIDS = {
+    'body_set_space': {'space'},
+}
+
 # Extra functions to add to the API
 API_CUSTOM_FUNCTIONS = {
     'area_get_monitor_event': ('void', [('uint32_t', 'index', True), ('physics_area_monitor_event_mut_t', 'event', False)], True),
@@ -50,6 +55,7 @@ API_CUSTOM_FUNCTIONS = {
 
 # Functions for which to validate all RIDs
 VALIDATE_ALL_RIDS = {
+    'body_add_shape',
     'joint_create_cone_twist',
     'joint_create_generic_6dof',
     'joint_create_hinge',
@@ -206,6 +212,9 @@ def clean_method_table(table):
     for method, (ret, args, const) in table.items():
         ret = physics_type_map_c.get(ret, ret)
         for i, (t, n, c) in enumerate(args):
+            if i > 0 and method not in VALIDATE_ALL_RIDS:
+                if t == 'RID':
+                    t = 'maybe_index_t'
             if n[0] in "&*":
                 t += ' *'
                 n = n[1:]

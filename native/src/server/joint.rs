@@ -59,18 +59,12 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.joint_create_hinge(create_hinge);
 }
 
-unsafe extern "C" fn create_hinge(
-	body_a: *const Index,
-	transform_a: *const sys::godot_transform,
-	body_b: *const Index,
-	transform_b: *const sys::godot_transform,
+fn create_hinge(
+	body_a: Index,
+	transform_a: &Transform,
+	body_b: Index,
+	transform_b: &Transform,
 ) -> *const Index {
-	// SAFETY: sys::godot_transform is the exact same as sys::godot_transform
-	let transform_a: *const sys::godot_transform = mem::transmute(transform_a);
-	let transform_b: *const sys::godot_transform = mem::transmute(transform_b);
-	// SAFETY: the module guarantees body_a and body_b are valid
-	let body_a = Index::copy_raw(body_a);
-	let body_b = Index::copy_raw(body_b);
 
 	let body_a = if let Index::Body(index) = body_a {
 		index
@@ -84,8 +78,6 @@ unsafe extern "C" fn create_hinge(
 		godot_error!("ID B does not point to a body");
 		return core::ptr::null();
 	};
-	let transform_a = Transform::from_sys(*transform_a);
-	let transform_b = Transform::from_sys(*transform_b);
 
 	let origin_a = transform_a.origin;
 	let origin_b = transform_b.origin;
