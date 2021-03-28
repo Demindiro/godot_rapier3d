@@ -13,12 +13,12 @@ pub struct Joint {
 
 struct LooseJoint {
 	params: JointParams,
-	body_a: usize,
-	body_b: usize,
+	body_a: u32,
+	body_b: u32,
 }
 
 impl Joint {
-	fn new<T>(joint: T, body_a: usize, body_b: usize) -> Self
+	fn new<T>(joint: T, body_a: u32, body_b: u32) -> Self
 	where
 		T: Into<JointParams> + Copy,
 	{

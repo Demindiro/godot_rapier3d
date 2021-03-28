@@ -110,7 +110,7 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 		let wrap_method = format_ident!("wrap_{}", method);
 		let default_ret = default_value_for_type(ret_type);
 		let (ret_wrap_pre, ret_wrap_post) = if ret_type == "maybe_index_t" {
-			(quote!(if let Some(r) = ), quote!({ r.raw() } else { ptr::null() }))
+			(quote!(if let Some(r) = ), quote!({ r.raw() } else { 0 }))
 		} else if ret_type == "index_t" {
 			(quote!(), quote!(.raw()))
 		} else {
@@ -160,8 +160,7 @@ fn map_type(t: &str) -> TokenStream {
 	let (t, ptr) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	let mut cons = t != "godot_object";
 	let t = match t {
-		"index_t" | "maybe_index_t" => quote!(*const Index),
-		"index_mut_t" => quote!(*mut Index),
+		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(u64),
 		"void" => quote!(()),
 		"uint32_t" => quote!(u32),
 		"int" => quote!(i32),
@@ -187,8 +186,7 @@ fn map_type_safe(t: &str) -> TokenStream {
 	let (t, ptr) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	let mut cons = t != "godot_object";
 	let t = match t {
-		"index_t" => quote!(Index),
-		"index_mut_t" => quote!(Box<Index>),
+		"index_t" | "index_mut_t" => quote!(Index),
 		"maybe_index_t" => quote!(Option<Index>),
 		"void" => quote!(()),
 		"uint32_t" => quote!(u32),
@@ -213,8 +211,7 @@ fn map_type_safe(t: &str) -> TokenStream {
 fn default_value_for_type(t: &str) -> TokenStream {
 	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	match t {
-		"index_t" | "maybe_index_t" => quote!(ptr::null()),
-		"index_mut_t" => quote!(ptr::null()),
+		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(0),
 		"void" => quote!(()),
 		"uint32_t" => quote!(0),
 		"int" => quote!(0),
@@ -234,8 +231,7 @@ fn default_value_for_type(t: &str) -> TokenStream {
 fn convert_type_to_sys(name: &TokenStream, t: &str) -> TokenStream {
 	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	match t {
-		"index_t" | "maybe_index_t" => quote!(ptr::null()),
-		"index_mut_t" => quote!(ptr::null()),
+		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(0),
 		"void" => quote!(()),
 		"uint32_t" => quote!(0),
 		"int" => quote!(0),
@@ -256,9 +252,8 @@ fn convert_type_from_sys(name:  &TokenStream, t: &str) -> (TokenStream, bool) {
 	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	let mut r = quote!(let #name =);
 	let t = match t {
-		"index_t" => (quote!(Index::copy_raw(#name)), false),
-		"index_mut_t" => (quote!(Index::from_raw(#name)), false),
-		"maybe_index_t" => (quote!(if #name.is_null() { None } else { Some(*#name) }), false),
+		"index_t" | "index_mut_t" => (quote!(Index::from_raw(#name).expect("Invalid index")), false),
+		"maybe_index_t" => (quote!(if #name == 0 { None } else { Some(Index::from_raw(#name).expect("Invalid index")) }), false),
 		"void" => (quote!(()), false),
 		"uint32_t" | "int" | "bool" | "float" => (quote!(#name), false),
 		"physics_body_state_mut_t" | "physics_space_state_mut_t" | "physics_area_monitor_event_mut_t" => (quote!(&mut *#name), false),
@@ -278,7 +273,7 @@ fn get_type_from_sys(t: &str) -> TokenStream {
 	let (t, _) = if t.ends_with(" *") { (&t[..t.len()-2], true) } else { (t, false) };
 	match t {
 		"index_t" => quote!(Index),
-		"index_mut_t" => quote!(Box<Index>),
+		"index_mut_t" => quote!(Index),
 		"maybe_index_t" => quote!(Option<Index>),
 		"void" => quote!(()),
 		"uint32_t" => quote!(u32),

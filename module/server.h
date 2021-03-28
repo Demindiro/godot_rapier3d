@@ -21,14 +21,6 @@ class PluggablePhysicsRID_Data : public RID_Data {
 };
 
 
-class PluggablePhysicsIndexHasher {
-public:
-	static _FORCE_INLINE_ uint32_t hash(index_t index) {
-		return (uint32_t)(size_t)index;
-	}
-};
-
-
 class PluggablePhysicsServer : public PhysicsServer {
 	GDCLASS(PluggablePhysicsServer, PhysicsServer);
 
@@ -57,8 +49,8 @@ class PluggablePhysicsServer : public PhysicsServer {
 	Ref<GDNative> library;
 
 	mutable RID_Owner<PluggablePhysicsRID_Data> rids;
-	HashMap<index_t, RID, PluggablePhysicsIndexHasher> reverse_rids;
-	HashMap<index_t, Callback, PluggablePhysicsIndexHasher> callbacks;
+	HashMap<index_t, RID> reverse_rids;
+	HashMap<index_t, Callback> callbacks;
 
 	_FORCE_INLINE_ RID make_rid(index_t index) {
 		PluggablePhysicsRID_Data *data = memnew(PluggablePhysicsRID_Data);
@@ -69,7 +61,11 @@ class PluggablePhysicsServer : public PhysicsServer {
 	}
 
 	_FORCE_INLINE_ index_t get_index(RID rid) const {
-		return rid.is_valid() ? this->rids.get(rid)->index : nullptr;
+		if (rid.is_valid()) {
+			PluggablePhysicsRID_Data *data = this->rids.get(rid);
+			return data != nullptr ? data->index : 0;
+		}
+		return 0;
 	}
 
 protected:

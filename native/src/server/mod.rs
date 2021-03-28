@@ -39,10 +39,10 @@ enum Instance<A, L> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Index {
-	Space(usize),
-	Body(usize),
-	Joint(usize),
-	Shape(usize),
+	Space(u32),
+	Body(u32),
+	Joint(u32),
+	Shape(u32),
 }
 
 /// Used primarily for cleanup, as there is only one generic `free()` function
@@ -55,6 +55,7 @@ enum Type {
 
 #[derive(Debug)]
 enum IndexError {
+	Invalid,
 	WrongType,
 	NoElement,
 }
@@ -109,7 +110,7 @@ macro_rules! map_index {
 				let w = $array
 					.read()
 					.expect(&format!("Failed to read-lock {} array", NAME));
-				if let Some(e) = w.get(index) {
+				if let Some(e) = w.get(index as usize) {
 					Ok(f(e))
 				} else {
 					Err(IndexError::NoElement)
@@ -128,7 +129,7 @@ macro_rules! map_index {
 				let mut w = $array
 					.write()
 					.expect(&format!("Failed to write-lock {} array", NAME));
-				if let Some(e) = w.get_mut(index) {
+				if let Some(e) = w.get_mut(index as usize) {
 					Ok(f(e))
 				} else {
 					Err(IndexError::NoElement)
@@ -144,7 +145,7 @@ macro_rules! map_index {
 				stringify!($variant)
 			));
 			let index = w.add(element);
-			Self::$variant(index)
+			Self::$variant(index as u32)
 		}
 	};
 }
@@ -194,7 +195,7 @@ impl Index {
 				let mut w = BODY_INDICES
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Body)));
-				if let Some(element) = w.remove(index) {
+				if let Some(element) = w.remove(index as usize) {
 					Ok(Type::Body(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -204,7 +205,7 @@ impl Index {
 				let mut w = JOINT_INDICES
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Joint)));
-				if let Some(element) = w.remove(index) {
+				if let Some(element) = w.remove(index as usize) {
 					Ok(Type::Joint(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -214,7 +215,7 @@ impl Index {
 				let mut w = SHAPE_INDICES
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Shape)));
-				if let Some(element) = w.remove(index) {
+				if let Some(element) = w.remove(index as usize) {
 					Ok(Type::Shape(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -224,7 +225,7 @@ impl Index {
 				let mut w = SPACE_INDICES
 					.write()
 					.expect(&format!("Failed to write-lock {} array", stringify!(Space)));
-				if let Some(element) = w.remove(index) {
+				if let Some(element) = w.remove(index as usize) {
 					Ok(Type::Space(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -234,14 +235,14 @@ impl Index {
 	}
 
 	/// Passes a shape to a closure if it exists, otherwise returns an error
-	fn read_shape<F, R>(index: usize, f: F) -> Result<R, IndexError>
+	fn read_shape<F, R>(index: u32, f: F) -> Result<R, IndexError>
 	where
 		F: FnOnce(&Shape) -> R,
 	{
 		let w = SHAPE_INDICES
 			.read()
 			.expect(&format!("Failed to read-lock {} array", stringify!(Shape)));
-		if let Some(element) = w.get(index) {
+		if let Some(element) = w.get(index as usize) {
 			Ok(f(element))
 		} else {
 			Err(IndexError::NoElement)
@@ -249,37 +250,43 @@ impl Index {
 	}
 
 	/// Passes a body to a closure if it exists, otherwise returns an error
-	fn read_body<F, R>(index: usize, f: F) -> Result<R, IndexError>
+	fn read_body<F, R>(index: u32, f: F) -> Result<R, IndexError>
 	where
 		F: FnOnce(&Body) -> R,
 	{
 		let w = BODY_INDICES
 			.read()
 			.expect(&format!("Failed to read-lock {} array", stringify!(Body)));
-		if let Some(element) = w.get(index) {
+		if let Some(element) = w.get(index as usize) {
 			Ok(f(element))
 		} else {
 			Err(IndexError::NoElement)
 		}
 	}
 
-	/// Returns a raw pointer to a boxed index. Care must be taken not to leak it
-	fn raw(self) -> *mut Index {
-		Box::into_raw(Box::new(self)) as *mut Index
+	/// Converts an Index into an u64
+	fn raw(self) -> u64 {
+		let f = |a, i| ((a as u64) << 32) | i as u64;
+		match self {
+			// Reserve 0 for invalid indices
+			Self::Body(i) => f(1, i),
+			Self::Joint(i) => f(2, i),
+			Self::Shape(i) => f(3, i),
+			Self::Space(i) => f(4, i),
+		}
 	}
 
-	/// Converts a raw pointer into it's boxed equivalent. This is used when freeing resources
-	///
-	/// SAFETY: The pointer must point to a valid boxed Index.
-	unsafe fn from_raw(from: *mut Index) -> Box<Self> {
-		Box::from_raw(from as *mut Self)
-	}
-
-	/// Copies the Index behind a raw pointer. This is used when accessing resources
-	///
-	/// SAFETY: The pointer must point to a valid boxed Index.
-	unsafe fn copy_raw(from: *const Index) -> Self {
-		*(from as *const Self)
+	/// Converts an u64 to an Index. Returns an error if the index is not valid
+	fn from_raw(from: u64) -> Result<Self, IndexError> {
+		let i = from as u32;
+		Ok(match from >> 32 {
+			// Reserve 0 for invalid indices
+			1 => Self::Body(i),
+			2 => Self::Joint(i),
+			3 => Self::Shape(i),
+			4 => Self::Space(i),
+			_ => return Err(IndexError::Invalid),
+		})
 	}
 }
 
@@ -296,6 +303,7 @@ macro_rules! map_or_err {
 		if let Err(e) = index.$func() {
 			use gdnative::prelude::godot_error;
 			match e {
+				IndexError::Invalid => godot_error!("ID is invalid {:?}", index),
 				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
 				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
 			}
@@ -306,6 +314,7 @@ macro_rules! map_or_err {
 		if let Err(e) = index.$func($($args)*) {
 			use gdnative::prelude::godot_error;
 			match e {
+				IndexError::Invalid => godot_error!("ID is invalid {:?}", index),
 				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
 				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
 			}
@@ -348,6 +357,6 @@ fn sync() {}
 
 fn flush_queries() {}
 
-fn free(index: Box<Index>) {
+fn free(index: Index) {
 	map_or_err!(index, remove);
 }

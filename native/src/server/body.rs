@@ -31,7 +31,7 @@ enum StateError {
 }
 
 struct Shape {
-	index: usize,
+	index: u32,
 	transform: Isometry<f32>,
 	enabled: bool,
 }
@@ -87,11 +87,11 @@ impl Body {
 		}
 	}
 
-	fn map_shape_mut<F>(&mut self, index: usize, f: F)
+	fn map_shape_mut<F>(&mut self, index: u32, f: F)
 	where
 		F: FnOnce(&mut Shape),
 	{
-		if let Some(shape) = self.shapes.get_mut(index) {
+		if let Some(shape) = self.shapes.get_mut(index as usize) {
 			f(shape);
 		} else {
 			eprintln!("Invalid shape index");
@@ -190,13 +190,13 @@ fn set_shape_transform(
 	shape: i32,
 	transform: &Transform,
 ) {
-	let shape = shape as usize;
+	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |v| v
 		.map_shape_mut(shape, |v| v.transform = transform_to_isometry(*transform)));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
-	let shape = shape as usize;
+	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |v| v
 		.map_shape_mut(shape, |v| v.enabled = !disable));
 }
