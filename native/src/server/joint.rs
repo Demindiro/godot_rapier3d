@@ -60,12 +60,12 @@ pub fn init(ffi: &mut ffi::FFI) {
 }
 
 unsafe extern "C" fn create_hinge(
-	body_a: ffi::Index,
-	transform_a: *const ffi::godot_transform,
-	body_b: ffi::Index,
-	transform_b: *const ffi::godot_transform,
-) -> ffi::Index {
-	// SAFETY: sys::godot_transform is the exact same as ffi::godot_transform
+	body_a: *const Index,
+	transform_a: *const sys::godot_transform,
+	body_b: *const Index,
+	transform_b: *const sys::godot_transform,
+) -> *const Index {
+	// SAFETY: sys::godot_transform is the exact same as sys::godot_transform
 	let transform_a: *const sys::godot_transform = mem::transmute(transform_a);
 	let transform_b: *const sys::godot_transform = mem::transmute(transform_b);
 	// SAFETY: the module guarantees body_a and body_b are valid

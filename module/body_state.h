@@ -1,22 +1,15 @@
 #ifndef PLUGGABLE_PHYSICS_BODY_STATE
 #define PLUGGABLE_PHYSICS_BODY_STATE
 
-#ifdef USE_GDNATIVE_HEADERS
-# include "../native/gdnative.h"
-#else
-# include "servers/physics_server.h"
-#endif
+#include "servers/physics_server.h"
+#include "typedef.h"
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef USE_GDNATIVE_HEADERS
-typedef Transform godot_transform; // TODO get this from the gdnative module somehow
-#endif
-
-struct body_state {
+struct physics_body_state {
 	godot_transform transform;
 };
 
@@ -36,7 +29,7 @@ class PluggablePhysicsDirectBodyState : public PhysicsDirectBodyState {
 	PluggablePhysicsDirectBodyState();
 	~PluggablePhysicsDirectBodyState();
 
-	struct body_state state;
+	struct physics_body_state state;
 
 public:
 	virtual Vector3 get_total_gravity() const;

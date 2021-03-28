@@ -1,7 +1,9 @@
 #ifndef PLUGGABLE_PHYSICS_SERVER_H
 #define PLUGGABLE_PHYSICS_SERVER_H
 
-#include "fn_table.h"
+#include "typedef.h"
+
+#include "api.gen.h"
 #include "index.h"
 #include "core/rid.h"
 #include "core/hash_map.h"

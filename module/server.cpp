@@ -1,6 +1,6 @@
 #include "core/error_macros.h"
 #include "server.h"
-#include "fn_table.h"
+#include "api.gen.h"
 #include "body_state.h"
 #include "core/project_settings.h"
 #include "core/os/os.h"
@@ -23,6 +23,18 @@ PluggablePhysicsServer::~PluggablePhysicsServer() {
         ERR_FAIL_COND_MSG(err, "Failed to close physics server library");
     }
 	*/
+}
+
+void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* object, const StringName &method) {
+	ERR_FAIL_MSG("TODO");
+}
+
+void PluggablePhysicsServer::area_set_area_monitor_callback(RID area, Object* object, const StringName &method) {
+	ERR_FAIL_MSG("TODO");
+}
+
+void PluggablePhysicsServer::body_get_collision_exceptions(RID body, List<RID> *list) {
+	ERR_FAIL_MSG("TODO");
 }
 
 void PluggablePhysicsServer::init() {
@@ -49,6 +61,14 @@ void PluggablePhysicsServer::init() {
 }
 
 void PluggablePhysicsServer::_bind_methods() {
+}
+
+void PluggablePhysicsServer::soft_body_update_visual_server(RID soft_body, SoftBodyVisualServerHandler *handler) {
+	ERR_FAIL_MSG("TODO");
+}
+
+void PluggablePhysicsServer::soft_body_get_collision_exceptions(RID soft_body, List<RID> *list) {
+	ERR_FAIL_MSG("TODO");
 }
 
 void PluggablePhysicsServer::step(float delta) {
@@ -95,4 +115,8 @@ void PluggablePhysicsServer::free(RID rid) {
 	// SAFETY: the RID is removed
 	index_mut_t mut_id = (index_mut_t)id;
 	(*this->fn_table.free)(mut_id);
+}
+
+PhysicsDirectSpaceState *PluggablePhysicsServer::space_get_direct_state(RID space) {
+	ERR_FAIL_V_MSG(nullptr, "TODO");
 }

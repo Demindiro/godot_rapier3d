@@ -6,6 +6,9 @@ mod collider;
 mod server;
 mod util;
 
+// TODO find a proper workaround for E0446
+pub use server::Index;
+
 use gdnative::api::World;
 use gdnative::prelude::*;
 use lazy_static::lazy_static;

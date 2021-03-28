@@ -15,4 +15,6 @@ gdnative = "*"
 lazy_static = "*"
 
 [build-dependencies]
-bindgen = "*"
+json = "*"
+quote = "*"
+proc-macro2 = "*"

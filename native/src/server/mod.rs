@@ -18,6 +18,7 @@ use rapier3d::na;
 use shape::Shape;
 use std::io;
 use std::sync::RwLock;
+use gdnative::sys;
 
 lazy_static::lazy_static! {
 	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());
@@ -37,7 +38,7 @@ enum Instance<A, L> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Index {
+pub enum Index {
 	Space(usize),
 	Body(usize),
 	Joint(usize),
@@ -263,21 +264,21 @@ impl Index {
 	}
 
 	/// Returns a raw pointer to a boxed index. Care must be taken not to leak it
-	fn raw(self) -> ffi::IndexMut {
-		Box::into_raw(Box::new(self)) as ffi::IndexMut
+	fn raw(self) -> *mut Index {
+		Box::into_raw(Box::new(self)) as *mut Index
 	}
 
 	/// Converts a raw pointer into it's boxed equivalent. This is used when freeing resources
 	///
 	/// SAFETY: The pointer must point to a valid boxed Index.
-	unsafe fn from_raw(from: ffi::IndexMut) -> Box<Self> {
+	unsafe fn from_raw(from: *mut Index) -> Box<Self> {
 		Box::from_raw(from as *mut Self)
 	}
 
 	/// Copies the Index behind a raw pointer. This is used when accessing resources
 	///
 	/// SAFETY: The pointer must point to a valid boxed Index.
-	unsafe fn copy_raw(from: ffi::Index) -> Self {
+	unsafe fn copy_raw(from: *const Index) -> Self {
 		*(from as *const Self)
 	}
 }
@@ -325,9 +326,9 @@ fn init(ffi: &mut ffi::FFI) {
 }
 
 /// SAFETY: transform must be a valid pointer and must not be freed by the caller
-unsafe fn conv_transform(transform: ffi::godot_transform) -> Isometry<f32> {
+unsafe fn conv_transform(transform: sys::godot_transform) -> Isometry<f32> {
 	use gdnative::{core_types::Transform, sys};
-	// SAFETY: gdnative_sys::godot_transform is the exact same as ffi::godot_transform
+	// SAFETY: gdnative_sys::godot_transform is the exact same as sys::godot_transform
 	let transform: sys::godot_transform = mem::transmute(transform);
 	let transform = Transform::from_sys(transform);
 	transform_to_isometry(transform)
@@ -347,6 +348,6 @@ unsafe extern "C" fn print_sync() {}
 
 unsafe extern "C" fn print_flush_queries() {}
 
-unsafe extern "C" fn free(index: ffi::IndexMut) {
+unsafe extern "C" fn free(index: *mut Index) {
 	map_or_err!(Index::from_raw(index), remove);
 }

@@ -104,7 +104,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.shape_set_data(set_data);
 }
 
-unsafe extern "C" fn create(shape: i32) -> ffi::Index {
+unsafe extern "C" fn create(shape: i32) -> *const Index {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
@@ -118,9 +118,9 @@ unsafe extern "C" fn create(shape: i32) -> ffi::Index {
 	}
 }
 
-unsafe extern "C" fn set_data(shape: ffi::Index, data: *const ffi::godot_variant) {
+unsafe extern "C" fn set_data(shape: *const Index, data: *const sys::godot_variant) {
 	map_or_err!(Index::copy_raw(shape), map_shape_mut, |shape| {
-		// SAFETY: sys::godot_variant and ffi::godot_variant are exactly the same
+		// SAFETY: sys::godot_variant and sys::godot_variant are exactly the same
 		let data: *const sys::godot_variant = mem::transmute(data);
 		let data = Variant::from_sys(*data);
 		if let Err(e) = shape.apply_data(&data) {
