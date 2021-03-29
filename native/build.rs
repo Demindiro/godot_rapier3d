@@ -8,9 +8,9 @@ use std::path::PathBuf;
 fn main() {
 	println!("cargo:rerun-if-changed=build.rs");
 	println!("cargo:rerun-if-changed=Cargo.lock");
-	println!("cargo:rerun-if-changed=../module/api.json");
+	println!("cargo:rerun-if-changed=api.json");
 
-	let mut file = File::open("../module/api.json").expect("Failed to open API");
+	let mut file = File::open("api.json").expect("Failed to open API");
 	let mut api = String::new();
 	file.read_to_string(&mut api).expect("Failed to read API");
 	drop(file);

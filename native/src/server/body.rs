@@ -236,7 +236,6 @@ fn set_space(body: Index, space: Option<Index>) {
 									.position(transform)
 									.build();
 								Body::set_shape_userdata(&mut collider, body_index, i as u32);
-								dbg!(collider.user_data, body_index, i);
 								colliders.push(Some(collider));
 							});
 							if let Err(_) = result {
