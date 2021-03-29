@@ -50,6 +50,8 @@ pub struct Shape {
 #[derive(Debug)]
 enum ShapeError {
 	InvalidData,
+	IncompleteTriangle,
+	ConvexNotManifold,
 }
 
 impl Shape {
@@ -155,7 +157,29 @@ impl Shape {
 				let radius = e(data.try_to_f64())? as f32;
 				SharedShape::ball(radius)
 			}
-			_ => panic!("Handle {:?} - {:?}", self.r#type, data),
+			Type::Concave | Type::Convex => {
+				let array = e(data.try_to_vector3_array())?;
+				let array = array.read();
+				if array.len() % 3 != 0 {
+					return Err(ShapeError::IncompleteTriangle);
+				}
+				let mut verts = Vec::with_capacity(array.len());
+				for v in array.iter() {
+					verts.push(p(v.x, v.y, v.z));
+				}
+				let mut indices = Vec::with_capacity(array.len());
+				// It may be worth to perform some sort of deduplication to reduce the
+				// amount of vertices. For now, the simple, dumb way will do.
+				for i in 0..array.len() / 3 {
+					let i = i * 3;
+					indices.push([i as u32, (i + 1) as u32, (i + 2) as u32]);
+				}
+				if let Type::Concave = self.r#type {
+					SharedShape::trimesh(verts, indices)
+				} else {
+					SharedShape::convex_mesh(verts, &indices).ok_or(ShapeError::ConvexNotManifold)?
+				}
+			},
 		};
 		Ok(())
 	}
