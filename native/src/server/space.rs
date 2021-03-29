@@ -22,7 +22,7 @@ fn intersect_ray(space: Index, info: &ffi::PhysicsRayInfo, result: &mut ffi::Phy
 		let intersection = space.query_pipeline.cast_ray_and_get_normal(
 			&space.colliders,
 			&Ray::new(Point3::new(from.x, from.y, from.z), vec_gd_to_na(dir)),
-			max_toi * 10.0,
+			max_toi,
 			// TODO what is the solid parameter for?
 			false,
 			// FIXME document the fact that bitmasks are limited to 16 bits (which honestly should be plenty
