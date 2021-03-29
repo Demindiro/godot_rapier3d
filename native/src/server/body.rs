@@ -105,6 +105,40 @@ impl Body {
 			None
 		}
 	}
+
+	fn set_index(&mut self, index: u32) {
+		if let Instance::Loose(body) = &mut self.body {
+			body.user_data &= !(u32::MAX as u128) | index as u128;
+		} else {
+			// Indices shouldn't be able to change after being attached
+			unreachable!();
+		}
+	}
+
+	fn add_shape(&mut self, index: u32, transform: &Transform, enabled: bool) {
+		self.shapes.push(Shape {
+			index,
+			transform: transform_to_isometry(*transform),
+			enabled,
+		})
+	}
+
+	// FIXME encode the data in such a way that non-Godot colliders don't get mixed with the ones
+	// created by Godot
+	fn set_shape_userdata(collider: &mut Collider, body_index: u32, shape_index: u32) {
+		collider.user_data &= !(u64::MAX as u128) | (body_index as u128) | ((shape_index as u128) << 32);
+	}
+
+	// FIXME ditto
+	pub fn get_shape_userdata(collider: &Collider) -> Option<(u32, u32)> {
+		let body = collider.user_data & (u32::MAX as u128);
+		let shape = (collider.user_data & ((u32::MAX as u128) << 32)) >> 32;
+		Some((body as u32, shape as u32))
+	}
+
+	pub fn object_id(&self) -> Option<ObjectID> {
+		self.object_id
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
@@ -130,13 +164,9 @@ fn create(r#type: i32, sleep: bool) -> Option<Index> {
 }
 
 fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
-	map_or_err!(body, map_body_mut, |v| {
+	map_or_err!(body, map_body_mut, |body, _| {
 		if let Index::Shape(index) = shape {
-			v.shapes.push(Shape {
-				index,
-				transform: transform_to_isometry(*transform),
-				enabled: !disabled,
-			})
+			body.add_shape(index, transform, !disabled);
 		} else {
 			godot_error!("ID does not point to a shape");
 		}
@@ -144,11 +174,11 @@ fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 }
 
 fn attach_object_instance_id(body: Index, id: u32) {
-	map_or_err!(body, map_body_mut, |v| v.object_id = ObjectID::new(id));
+	map_or_err!(body, map_body_mut, |v, _| v.object_id = ObjectID::new(id));
 }
 
 fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
-	map_or_err!(body, map_body, |body| {
+	map_or_err!(body, map_body, |body, _| {
 		match &body.body {
 			Instance::Attached((body, _), space) => {
 				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
@@ -164,7 +194,7 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 
 fn remove_shape(body: Index, shape: i32) {
 	let shape = shape as usize;
-	map_or_err!(body, map_body_mut, |body| {
+	map_or_err!(body, map_body_mut, |body, _| {
 		// TODO this can panic
 		body.shapes.remove(shape);
 		if let Instance::Attached((_, colliders), space) = &mut body.body {
@@ -181,34 +211,33 @@ fn remove_shape(body: Index, shape: i32) {
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
-	map_or_err!(body, map_body_mut, |v| v
+	map_or_err!(body, map_body_mut, |v, _| v
 		.map_shape_mut(shape, |v| v.transform =
 			transform_to_isometry(*transform)));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
 	let shape = shape as u32;
-	map_or_err!(body, map_body_mut, |v| v
+	map_or_err!(body, map_body_mut, |v, _| v
 		.map_shape_mut(shape, |v| v.enabled = !disable));
 }
 
 fn set_space(body: Index, space: Option<Index>) {
 	if let Some(space) = space {
-		if let Ok(space) = space.map_space(|&v| v) {
-			// We need to get the shapes now, as the index array will be write locked later
+		if let Ok(space) = space.map_space(|&v, _| v) {
 			let colliders = body
-				.map_body(|body| {
+				.map_body(|body, body_index| {
 					let mut colliders = Vec::with_capacity(body.shapes.len());
-					for shape in &body.shapes {
+					for (i, shape) in body.shapes.iter().enumerate() {
 						if shape.enabled {
 							let transform = shape.transform;
 							let result = Index::read_shape(shape.index, |shape| {
-								let collider = Some(
-									ColliderBuilder::new(shape.shape().clone())
-										.position(transform)
-										.build(),
-								);
-								colliders.push(collider);
+								let mut collider = ColliderBuilder::new(shape.shape().clone())
+									.position(transform)
+									.build();
+								Body::set_shape_userdata(&mut collider, body_index, i as u32);
+								dbg!(collider.user_data, body_index, i);
+								colliders.push(Some(collider));
 							});
 							if let Err(_) = result {
 								godot_error!("Shape is invalid: {}", shape.index);
@@ -221,7 +250,7 @@ fn set_space(body: Index, space: Option<Index>) {
 					colliders
 				})
 				.expect("Body is invalid");
-			map_or_err!(body, map_body_mut, |body| {
+			map_or_err!(body, map_body_mut, |body, _| {
 				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
 				let b = mem::replace(&mut body.body, b);
 				body.body = match b {
@@ -247,7 +276,7 @@ fn set_space(body: Index, space: Option<Index>) {
 			});
 		}
 	} else {
-		map_or_err!(body, map_body_mut, |body| match body.body {
+		map_or_err!(body, map_body_mut, |body, _| match body.body {
 			Instance::Attached((body, _), space) => {
 				crate::modify_space(space, |space| {
 					space
@@ -281,7 +310,7 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 		}
 	};
 
-	map_or_err!(body, map_body_mut, |body| {
+	map_or_err!(body, map_body_mut, |body, _| {
 		match State::new(state, value) {
 			Ok(state) => match &mut body.body {
 				Instance::Attached(body, space) => {

@@ -16,7 +16,7 @@ use rapier3d::dynamics::{
 	IntegrationParameters, JointSet, RigidBody, RigidBodyHandle, RigidBodySet,
 };
 use rapier3d::geometry::{BroadPhase, Collider, ColliderHandle, ColliderSet, NarrowPhase};
-use rapier3d::pipeline::PhysicsPipeline;
+use rapier3d::pipeline::{PhysicsPipeline, QueryPipeline};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
@@ -32,7 +32,8 @@ lazy_static! {
 }
 
 struct World3D {
-	pipeline: PhysicsPipeline,
+	physics_pipeline: PhysicsPipeline,
+	query_pipeline: QueryPipeline,
 	gravity: Vector3,
 	integration_parameters: IntegrationParameters,
 	broad_phase: BroadPhase,
@@ -42,6 +43,7 @@ struct World3D {
 	joints: JointSet,
 	physics_hooks: (),
 	event_handler: (),
+	query_pipeline_out_of_date: bool,
 }
 
 #[derive(NativeClass)]
@@ -70,7 +72,7 @@ impl Rapier3D {
 impl World3D {
 	fn step(&mut self, delta: f32) {
 		self.integration_parameters.dt = delta;
-		self.pipeline.step(
+		self.physics_pipeline.step(
 			&vec_gd_to_na(self.gravity),
 			&self.integration_parameters,
 			&mut self.broad_phase,
@@ -81,15 +83,15 @@ impl World3D {
 			&self.physics_hooks,
 			&self.event_handler,
 		);
+		self.query_pipeline_out_of_date = true;
 	}
-}
 
-impl SpaceHandle {
-	fn modify<F, R>(self, f: F) -> Result<R, ()>
-	where
-		F: FnOnce(&mut World3D) -> R,
-	{
-		modify_space(self, f)
+	/// Ensures the query pipeline is up to date if any bodies were added
+	fn update_query_pipeline(&mut self) {
+		if self.query_pipeline_out_of_date {
+			self.query_pipeline.update(&self.bodies, &self.colliders);
+			self.query_pipeline_out_of_date = false;
+		}
 	}
 }
 
@@ -103,6 +105,24 @@ macro_rules! get_spaces_mut {
 	() => {
 		SPACES.write().expect("Failed to write WORLDS")
 	};
+}
+
+impl SpaceHandle {
+	fn modify<F, R>(self, f: F) -> Result<R, ()>
+	where
+		F: FnOnce(&mut World3D) -> R,
+	{
+		modify_space(self, f)
+	}
+
+	fn read<F, R>(self, f: F) -> Result<R, ()>
+	where
+		F: FnOnce(&World3D) -> R,
+	{
+		let spaces = get_spaces!();
+		let space = spaces.get(self.0).and_then(Option::as_ref).ok_or(())?;
+		Ok(f(space))
+	}
 }
 
 macro_rules! get_world_to_space_mut {
@@ -194,12 +214,15 @@ where
 {
 	let mut spaces = get_spaces_mut!();
 	let space = spaces.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
+	// TODO add some wrapper methods that will set this only when necessary
+	space.query_pipeline_out_of_date = true;
 	Ok(f(space))
 }
 
 fn create_world() -> World3D {
 	World3D {
-		pipeline: PhysicsPipeline::new(),
+		physics_pipeline: PhysicsPipeline::new(),
+		query_pipeline: QueryPipeline::new(),
 		gravity: Vector3::new(0.0, -9.81, 0.0),
 		integration_parameters: IntegrationParameters::default(),
 		broad_phase: BroadPhase::new(),
@@ -210,6 +233,7 @@ fn create_world() -> World3D {
 		// We ignore physics hooks and contact events for now.
 		physics_hooks: (),
 		event_handler: (),
+		query_pipeline_out_of_date: false,
 	}
 }
 

@@ -60,7 +60,8 @@ enum IndexError {
 	NoElement,
 }
 
-struct ObjectID(NonZeroU32);
+#[derive(Clone, Copy)]
+pub struct ObjectID(NonZeroU32);
 
 impl<T> SparseVec<T> {
 	fn new() -> Self {
@@ -103,7 +104,7 @@ macro_rules! map_index {
 	($fn:ident, $fn_mut:ident, $fn_add:ident, $fn_remove:ident, $array:ident, $variant:ident, $struct:ty) => {
 		fn $fn<F, R>(self, f: F) -> Result<R, IndexError>
 		where
-			F: FnOnce(&$struct) -> R,
+			F: FnOnce(&$struct, u32) -> R,
 		{
 			const NAME: &str = stringify!($variant);
 			if let Index::$variant(index) = self {
@@ -111,7 +112,7 @@ macro_rules! map_index {
 					.read()
 					.expect(&format!("Failed to read-lock {} array", NAME));
 				if let Some(e) = w.get(index as usize) {
-					Ok(f(e))
+					Ok(f(e, index))
 				} else {
 					Err(IndexError::NoElement)
 				}
@@ -122,7 +123,7 @@ macro_rules! map_index {
 
 		fn $fn_mut<F, R>(self, f: F) -> Result<R, IndexError>
 		where
-			F: FnOnce(&mut $struct) -> R,
+			F: FnOnce(&mut $struct, u32) -> R,
 		{
 			const NAME: &str = stringify!($variant);
 			if let Index::$variant(index) = self {
@@ -130,7 +131,7 @@ macro_rules! map_index {
 					.write()
 					.expect(&format!("Failed to write-lock {} array", NAME));
 				if let Some(e) = w.get_mut(index as usize) {
-					Ok(f(e))
+					Ok(f(e, index))
 				} else {
 					Err(IndexError::NoElement)
 				}
@@ -146,6 +147,21 @@ macro_rules! map_index {
 			));
 			let index = w.add(element);
 			Self::$variant(index as u32)
+		}
+
+		fn $fn_remove(self) -> Result<$struct, IndexError> {
+			if let Index::$variant(index) = self {
+				let mut w = $array
+					.write()
+					.expect(&format!("Failed to write-lock {} array", stringify!($variant)));
+				if let Some(element) = w.remove(index as usize) {
+					Ok(element)
+				} else {
+					Err(IndexError::NoElement)
+				}
+			} else {
+				Err(IndexError::WrongType)
+			}
 		}
 	};
 }
@@ -188,49 +204,12 @@ impl Index {
 		SpaceHandle
 	);
 
-	// TODO this shouldn't return (), as additional cleanup will be necessary
 	fn remove(self) -> Result<Type, IndexError> {
 		match self {
-			Index::Body(index) => {
-				let mut w = BODY_INDICES
-					.write()
-					.expect(&format!("Failed to write-lock {} array", stringify!(Body)));
-				if let Some(element) = w.remove(index as usize) {
-					Ok(Type::Body(element))
-				} else {
-					Err(IndexError::NoElement)
-				}
-			}
-			Index::Joint(index) => {
-				let mut w = JOINT_INDICES
-					.write()
-					.expect(&format!("Failed to write-lock {} array", stringify!(Joint)));
-				if let Some(element) = w.remove(index as usize) {
-					Ok(Type::Joint(element))
-				} else {
-					Err(IndexError::NoElement)
-				}
-			}
-			Index::Shape(index) => {
-				let mut w = SHAPE_INDICES
-					.write()
-					.expect(&format!("Failed to write-lock {} array", stringify!(Shape)));
-				if let Some(element) = w.remove(index as usize) {
-					Ok(Type::Shape(element))
-				} else {
-					Err(IndexError::NoElement)
-				}
-			}
-			Index::Space(index) => {
-				let mut w = SPACE_INDICES
-					.write()
-					.expect(&format!("Failed to write-lock {} array", stringify!(Space)));
-				if let Some(element) = w.remove(index as usize) {
-					Ok(Type::Space(element))
-				} else {
-					Err(IndexError::NoElement)
-				}
-			}
+			Index::Body(_) => self.remove_body().map(Type::Body),
+			Index::Joint(_) => self.remove_joint().map(Type::Joint),
+			Index::Shape(_) => self.remove_shape().map(Type::Shape),
+			Index::Space(_) => self.remove_space().map(Type::Space),
 		}
 	}
 
@@ -328,6 +307,7 @@ fn init(ffi: &mut ffi::FFI) {
 	ffi.step(step);
 	ffi.sync(sync);
 	ffi.free(free);
+	ffi.get_process_info(get_process_info);
 	body::init(ffi);
 	joint::init(ffi);
 	space::init(ffi);
@@ -359,4 +339,9 @@ fn flush_queries() {}
 
 fn free(index: Index) {
 	map_or_err!(index, remove);
+}
+
+fn get_process_info(info: i32) -> i32 {
+	godot_error!("TODO {}", info);
+	0
 }

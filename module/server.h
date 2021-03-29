@@ -7,9 +7,10 @@
 #include "index.h"
 #include "core/rid.h"
 #include "core/hash_map.h"
+#include "core/resource.h"
 #include "servers/physics_server.h"
 #include "body_state.h"
-#include "core/resource.h"
+#include "space_state.h"
 // TODO ditto
 #include "gdnative.h"
 //#include "gdnative/gdnative.h"
@@ -44,6 +45,7 @@ class PluggablePhysicsServer : public PhysicsServer {
 	};
 
 	PluggablePhysicsDirectBodyState body_state_singleton;
+	PluggablePhysicsDirectSpaceState *space_state_singleton;
 
 	struct fn_table fn_table;
 	Ref<GDNative> library;
@@ -51,6 +53,8 @@ class PluggablePhysicsServer : public PhysicsServer {
 	mutable RID_Owner<PluggablePhysicsRID_Data> rids;
 	HashMap<index_t, RID> reverse_rids;
 	HashMap<index_t, Callback> callbacks;
+
+	friend class PluggablePhysicsDirectSpaceState;
 
 	_FORCE_INLINE_ RID make_rid(index_t index) {
 		PluggablePhysicsRID_Data *data = memnew(PluggablePhysicsRID_Data);
@@ -66,6 +70,10 @@ class PluggablePhysicsServer : public PhysicsServer {
 			return data != nullptr ? data->index : 0;
 		}
 		return 0;
+	}
+
+	_FORCE_INLINE_ RID get_rid(index_t index) const {
+		return index != 0 ? this->reverse_rids.get(index) : RID();
 	}
 
 protected:

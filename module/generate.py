@@ -48,9 +48,13 @@ API_CUSTOM_FUNCTIONS = {
     'body_get_collision_exception': ('index_t', [('index_t', 'body', True), ('int', 'index', True)], True),
     'body_get_collision_exception_count': ('int', [('index_t', 'body', True)], True),
     'free': ('void', [('index_mut_t', 'id', False)], False),
+    'space_intersect_ray': ('bool', [
+        ('index_t', 'space', True),
+        ('struct physics_ray_info *', 'info', True),
+        ('struct physics_ray_result *', 'result', False),
+    ], False),
     'soft_body_get_collision_exception': ('index_t', [('index_t', 'body', True), ('int', 'index', True)], True),
     'soft_body_get_collision_exception_count': ('int', [('index_t', 'body', True)], True),
-    'space_get_direct_state': ('void', [('index_t', 'space', True), ('physics_space_state_mut_t', 'state', False)], True)
 }
 
 # Functions for which to validate all RIDs
@@ -173,7 +177,7 @@ def generate_method_table(header_file):
             args = '(' + line
 
             # Check if method needs to be skipped
-            if method in API_EXCLUDE:
+            if method in API_EXCLUDE or (method[0] == '*' and method[1:] in API_EXCLUDE):
                 continue
 
             # Strip default args
@@ -233,6 +237,7 @@ def generate_api_h(method_table, api_h):
         '\n'
         '#include "index.h"\n'
         '#include "body_state.h"\n'
+        '#include "space_state.h"\n'
         '\n'
         '#include "core/rid.h"\n'
         '#include "servers/physics_server.h"\n'

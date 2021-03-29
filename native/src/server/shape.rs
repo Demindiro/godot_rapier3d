@@ -184,7 +184,7 @@ fn create(shape: i32) -> Option<Index> {
 }
 
 fn set_data(shape: Index, data: &Variant) {
-	map_or_err!(shape, map_shape_mut, |shape| {
+	map_or_err!(shape, map_shape_mut, |shape, _| {
 		if let Err(e) = shape.apply_data(&data) {
 			eprintln!("Failed to apply data: {:?}", e);
 		}

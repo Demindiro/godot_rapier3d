@@ -10,19 +10,16 @@
 #include "gdnative.h"
 
 
-
-
 PluggablePhysicsServer::PluggablePhysicsServer() {
 	zeromem(&this->fn_table, sizeof(this->fn_table));
+	this->space_state_singleton = memnew(PluggablePhysicsDirectSpaceState(this));
 }
+
 PluggablePhysicsServer::~PluggablePhysicsServer() {
-	// TODO
-	/*
-    if (this->library != nullptr) {
-		DEREF(this->library);
-        ERR_FAIL_COND_MSG(err, "Failed to close physics server library");
-    }
-	*/
+}
+
+void PluggablePhysicsServer::_bind_methods() {
+
 }
 
 void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* object, const StringName &method) {
@@ -58,17 +55,6 @@ void PluggablePhysicsServer::init() {
 		void (*init_func)(struct fn_table *) = reinterpret_cast<void (*)(struct fn_table *)>(handle);
 		init_func(&this->fn_table);
     }
-}
-
-void PluggablePhysicsServer::_bind_methods() {
-}
-
-void PluggablePhysicsServer::soft_body_update_visual_server(RID soft_body, SoftBodyVisualServerHandler *handler) {
-	ERR_FAIL_MSG("TODO");
-}
-
-void PluggablePhysicsServer::soft_body_get_collision_exceptions(RID soft_body, List<RID> *list) {
-	ERR_FAIL_MSG("TODO");
 }
 
 void PluggablePhysicsServer::step(float delta) {
@@ -119,5 +105,16 @@ void PluggablePhysicsServer::free(RID rid) {
 }
 
 PhysicsDirectSpaceState *PluggablePhysicsServer::space_get_direct_state(RID space) {
-	ERR_FAIL_V_MSG(nullptr, "TODO");
+	index_t id = this->get_index(space);
+	ERR_FAIL_COND_V_MSG(id == 0, nullptr, "Space doesn't exist");
+	this->space_state_singleton->space = id;
+	return this->space_state_singleton;
+}
+
+void PluggablePhysicsServer::soft_body_update_visual_server(RID soft_body, SoftBodyVisualServerHandler *handler) {
+	ERR_FAIL_MSG("TODO");
+}
+
+void PluggablePhysicsServer::soft_body_get_collision_exceptions(RID soft_body, List<RID> *list) {
+	ERR_FAIL_MSG("TODO");
 }

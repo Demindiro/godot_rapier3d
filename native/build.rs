@@ -168,9 +168,18 @@ fn map_type(t: &str) -> TokenStream {
 		"int" => quote!(i32),
 		"bool" => quote!(bool),
 		"float" => quote!(f32),
+		"size_t" => quote!(usize),
 		"physics_body_state_mut_t" => quote!(*mut PhysicsBodyState),
 		"physics_space_state_mut_t" => quote!(*mut PhysicsSpaceState),
 		"physics_area_monitor_event_mut_t" => quote!(*mut AreaMonitorEvent),
+		"struct physics_ray_result" => {
+			cons = false;
+			quote!(PhysicsRayResult)
+		}
+		"struct physics_ray_info" => {
+			cons = true;
+			quote!(PhysicsRayInfo)
+		}
 		_ if t.starts_with("godot_") => format!("gdnative::sys::{}", t).parse().unwrap(),
 		_ => panic!("Unhandled type: {}", t),
 	};
@@ -286,10 +295,12 @@ fn convert_type_from_sys(name: &TokenStream, t: &str) -> (TokenStream, bool) {
 			false,
 		),
 		"void" => (quote!(()), false),
-		"uint32_t" | "int" | "bool" | "float" => (quote!(#name), false),
+		"size_t" | "uint32_t" | "int" | "bool" | "float" => (quote!(#name), false),
 		"physics_body_state_mut_t"
 		| "physics_space_state_mut_t"
-		| "physics_area_monitor_event_mut_t" => (quote!(&mut *#name), false),
+		| "physics_area_monitor_event_mut_t"
+		| "struct physics_ray_result" => (quote!(&mut *#name), false),
+		"struct physics_ray_info" => (quote!(&*#name), false),
 		"godot_variant" => (quote!(Variant::from_sys(*#name)), true),
 		"godot_transform" => (quote!(&Transform::from_sys(*#name)), false),
 		"godot_vector3" => (quote!(Vector3::from_sys(*#name)), false),
@@ -306,12 +317,12 @@ fn convert_type_from_sys(name: &TokenStream, t: &str) -> (TokenStream, bool) {
 }
 
 fn get_type_from_sys(t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") {
+	let (t, ptr) = if t.ends_with(" *") {
 		(&t[..t.len() - 2], true)
 	} else {
 		(t, false)
 	};
-	match t {
+	let t = match t {
 		"index_t" => quote!(Index),
 		"index_mut_t" => quote!(Index),
 		"maybe_index_t" => quote!(Option<Index>),
@@ -320,14 +331,18 @@ fn get_type_from_sys(t: &str) -> TokenStream {
 		"int" => quote!(i32),
 		"bool" => quote!(bool),
 		"float" => quote!(f32),
+		"size_t" => quote!(usize),
 		"physics_body_state_mut_t" => quote!(&mut PhysicsBodyState),
 		"physics_space_state_mut_t" => quote!(&mut PhysicsSpaceState),
 		"physics_area_monitor_event_mut_t" => quote!(&mut AreaMonitorEvent),
+		"struct physics_ray_result" => quote!(&mut PhysicsRayResult),
+		"struct physics_ray_info" => quote!(&PhysicsRayInfo),
 		"godot_variant" => quote!(&Variant),
 		"godot_transform" => quote!(&Transform),
 		"godot_vector3" => quote!(Vector3),
 		"godot_pool_vector3_array" => quote!(TypedArray<Vector3>),
 		"godot_object" => quote!(Ref<Object>),
 		_ => panic!("Unhandled type: {}", t),
-	}
+	};
+	t
 }
