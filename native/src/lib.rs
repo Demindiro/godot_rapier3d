@@ -257,7 +257,7 @@ fn get_transform(space: SpaceHandle, handle: RigidBodyHandle) -> Result<Transfor
 	Ok(transform)
 }
 
-fn init(handle: InitHandle) {
+pub fn init(handle: InitHandle) {
 	handle.add_class::<Rapier3D>();
 	handle.add_class::<body::RigidBody>();
 	handle.add_class::<body::StaticBody>();
