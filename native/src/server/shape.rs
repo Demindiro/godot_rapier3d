@@ -136,7 +136,7 @@ impl Shape {
 				let heights = e(data.get("heights").try_to_float32_array())?;
 				let heights = heights.read();
 				// TODO there are max_height and min_height, what are they for?
-				let mut map = Matrix::<_, Dynamic, Dynamic, _>::zeros(depth, width);
+				let mut map = Matrix::<_, Dynamic, Dynamic, _>::zeros(width, depth);
 				for x in 0..width {
 					for z in 0..depth {
 						map[(x, z)] = heights[x * depth + z];
