@@ -44,6 +44,7 @@ struct World3D {
 	physics_hooks: (),
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
+	index: Option<Index>,
 }
 
 #[derive(NativeClass)]
@@ -122,6 +123,16 @@ impl SpaceHandle {
 		let spaces = get_spaces!();
 		let space = spaces.get(self.0).and_then(Option::as_ref).ok_or(())?;
 		Ok(f(space))
+	}
+
+	/// Get the server index of this space
+	fn index(&self) -> Result<Option<server::Index>, ()> {
+		self.read(|space| space.index)
+	}
+
+	/// Set the server index of this space
+	fn set_index(&self, index: Option<server::Index>) -> Result<(), ()> {
+		self.modify(|space| space.index = index)
 	}
 }
 
@@ -234,6 +245,7 @@ fn create_world() -> World3D {
 		physics_hooks: (),
 		event_handler: (),
 		query_pipeline_out_of_date: false,
+		index: None,
 	}
 }
 

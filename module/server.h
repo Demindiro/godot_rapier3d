@@ -44,7 +44,7 @@ class PluggablePhysicsServer : public PhysicsServer {
 		}
 	};
 
-	PluggablePhysicsDirectBodyState body_state_singleton;
+	PluggablePhysicsDirectBodyState *body_state_singleton;
 	PluggablePhysicsDirectSpaceState *space_state_singleton;
 
 	struct fn_table fn_table;
@@ -54,6 +54,7 @@ class PluggablePhysicsServer : public PhysicsServer {
 	HashMap<index_t, RID> reverse_rids;
 	HashMap<index_t, Callback> callbacks;
 
+	friend class PluggablePhysicsDirectBodyState;
 	friend class PluggablePhysicsDirectSpaceState;
 
 	_FORCE_INLINE_ RID make_rid(index_t index) {

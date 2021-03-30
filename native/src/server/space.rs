@@ -9,7 +9,9 @@ pub fn init(ffi: &mut ffi::FFI) {
 }
 
 fn create() -> Option<Index> {
-	Some(Index::add_space(crate::create_space()))
+	let index = Index::add_space(crate::create_space());
+	index.map_space(|space, _| space.set_index(Some(index))).unwrap().unwrap();
+	Some(index)
 }
 
 fn intersect_ray(space: Index, info: &ffi::PhysicsRayInfo, result: &mut ffi::PhysicsRayResult) -> bool {

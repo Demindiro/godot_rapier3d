@@ -12,9 +12,11 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use std::slice;
 
+// TODO ditto below
 #[repr(C)]
 pub struct PhysicsBodyState {
-	pub transform: sys::godot_transform,
+	transform: sys::godot_transform,
+	space_index: u64,
 }
 
 #[repr(C)]
@@ -70,6 +72,19 @@ use super::Index;
 impl FFI {
 	pub fn _new(table: *mut UnsafeApi) -> Self {
 		Self { table }
+	}
+}
+
+impl PhysicsBodyState {
+	pub fn set_space(&mut self, index: Index) {
+		self.space_index = index.raw();
+	}
+
+	pub fn set_transform(&mut self, transform: &Transform) {
+		// SAFETY: transform is guaranteed to be valid
+		unsafe {
+			self.transform = *transform.sys();
+		}
 	}
 }
 

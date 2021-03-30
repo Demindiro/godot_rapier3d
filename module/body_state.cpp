@@ -1,11 +1,5 @@
 #include "body_state.h"
-
-
-PluggablePhysicsDirectBodyState::PluggablePhysicsDirectBodyState() {
-}
-
-PluggablePhysicsDirectBodyState::~PluggablePhysicsDirectBodyState() {
-}
+#include "space_state.h"
 
 
 Vector3 PluggablePhysicsDirectBodyState::get_total_gravity() const {
@@ -109,5 +103,6 @@ void PluggablePhysicsDirectBodyState::integrate_forces() {
 };
 
 PhysicsDirectSpaceState *PluggablePhysicsDirectBodyState::get_space_state() {
-	return nullptr;
+	this->space_state_singleton->space = this->state.space;
+	return this->space_state_singleton;
 };

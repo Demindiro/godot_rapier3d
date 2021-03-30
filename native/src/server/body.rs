@@ -182,10 +182,8 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 		match &body.body {
 			Instance::Attached((body, _), space) => {
 				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
-				// FIXME make this safe
-				unsafe {
-					state.transform = *transform.sys();
-				}
+				state.set_transform(&transform);
+				state.set_space(space.index().expect("Invalid space").expect("Space has no index"));
 			}
 			Instance::Loose(_) => {}
 		}

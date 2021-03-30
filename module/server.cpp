@@ -12,7 +12,9 @@
 
 PluggablePhysicsServer::PluggablePhysicsServer() {
 	zeromem(&this->fn_table, sizeof(this->fn_table));
+	this->body_state_singleton = memnew(PluggablePhysicsDirectBodyState(this));
 	this->space_state_singleton = memnew(PluggablePhysicsDirectSpaceState(this));
+	this->body_state_singleton->space_state_singleton = this->space_state_singleton;
 }
 
 PluggablePhysicsServer::~PluggablePhysicsServer() {
@@ -67,23 +69,33 @@ void PluggablePhysicsServer::step(float delta) {
 	const index_t *id = nullptr;
 	while ((id = this->callbacks.next(id)) != nullptr) {
 
-		(*this->fn_table.body_get_direct_state)(*id, &this->body_state_singleton.state);
-		Variant variant_body_direct = &this->body_state_singleton;
+		(*this->fn_table.body_get_direct_state)(*id, &this->body_state_singleton->state);
+		// I'd like to note just how much I hate C++
+		// I was stuck on this not working for two hours or so
+		// Then I added some code below (now commented) to see why the hell shit isn't getting called
+		// Turns out there was an error, namely '2' AKA 'CALL_ERROR_INVALID_ARGUMENT'
+		// This was because I changed 'PhysicsDirectBodyState body_state_singleton' to 'PhysicsDirectBodyState *body_state_singleton'
+		// The line below used to be '... = &this->body_state_singleton'
+		// Not a single warning, error or whatever. Nada
+		// Why
+		Variant variant_body_direct = this->body_state_singleton;
 
 		Callback *callback = this->callbacks.getptr(*id);
 		const Variant *argv[2] = { &variant_body_direct, &callback->userdata };
 		int argc = (callback->userdata.get_type() == Variant::NIL) ? 1 : 2;
 
-		Variant::CallError error;
+		Variant::CallError error = {};
+		//printf("%S -> %S (%d)\n", callback->object->get_class().ptr(), String(callback->method).ptr(), argc);
 		callback->object->call(callback->method, argv, argc, error);
+		//printf("%u\n", *(uint32_t *)&error);
 	}
 }
 
 PhysicsDirectBodyState *PluggablePhysicsServer::body_get_direct_state(RID rid) {
 	ERR_FAIL_COND_V_MSG(this->fn_table.body_get_direct_state == nullptr, nullptr, "Not implemented");
 	index_t id = this->get_index(rid);
-	(*this->fn_table.body_get_direct_state)(id, &this->body_state_singleton.state);
-	return &this->body_state_singleton;
+	(*this->fn_table.body_get_direct_state)(id, &this->body_state_singleton->state);
+	return this->body_state_singleton;
 }
 
 void PluggablePhysicsServer::body_set_force_integration_callback(RID body, Object *receiver, const StringName &method, const Variant &userdata) {
