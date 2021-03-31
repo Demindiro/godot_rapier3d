@@ -10,13 +10,18 @@ pub fn vec_na_to_gd(from: na::Vector3<f32>) -> Vector3 {
 	Vector3::new(from.x, from.y, from.z)
 }
 
-pub fn transform_to_isometry(transform: Transform) -> Isometry<f32> {
+pub fn transform_to_isometry_and_scale(transform: &Transform) -> (Isometry<f32>, Vector3) {
 	let origin = Translation::new(transform.origin.x, transform.origin.y, transform.origin.z);
 	let rotation = transform.basis.to_quat();
+	let scale = transform.basis.to_scale();
 	let rotation = na::Unit::from_quaternion(na::Quaternion::new(
 		rotation.r, rotation.i, rotation.j, rotation.k,
 	));
-	Isometry::from_parts(origin, rotation)
+	(Isometry::from_parts(origin, rotation), scale)
+}
+
+pub fn transform_to_isometry(transform: Transform) -> Isometry<f32> {
+	transform_to_isometry_and_scale(&transform).0
 }
 
 pub fn isometry_to_transform(isometry: &Isometry<f32>) -> Transform {

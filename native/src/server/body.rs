@@ -45,6 +45,7 @@ enum StateError {
 struct Shape {
 	index: u32,
 	transform: Isometry<f32>,
+	scale: Vector3,
 	enabled: bool,
 }
 
@@ -52,6 +53,7 @@ pub struct Body {
 	body: Instance<(RigidBodyHandle, Vec<Option<ColliderHandle>>), RigidBody>,
 	object_id: Option<ObjectID>,
 	shapes: Vec<Shape>,
+	scale: Vector3,
 }
 
 impl Type {
@@ -110,6 +112,7 @@ impl Body {
 			body: Instance::Loose(r#type.create_body(sleep)),
 			object_id: None,
 			shapes: Vec::new(),
+			scale: Vector3::one(),
 		}
 	}
 
@@ -146,6 +149,7 @@ impl Body {
 			index,
 			transform: transform_to_isometry(*transform),
 			enabled,
+			scale: Vector3::one(),
 		});
 		self.recalculate_inertia();
 	}
@@ -357,8 +361,8 @@ fn set_param(body: Index, param: i32, value: f32) {
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |v, _| v
-		.map_shape_mut(shape, |v| v.transform =
-			transform_to_isometry(*transform)));
+		.map_shape_mut(shape, |v| (v.transform, v.scale) =
+			transform_to_isometry_and_scale(transform)));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
@@ -376,8 +380,11 @@ fn set_space(body: Index, space: Option<Index>) {
 					for (i, shape) in body.shapes.iter().enumerate() {
 						if shape.enabled {
 							let transform = shape.transform;
+							let shape_scale = transform.rotation * vec_gd_to_na(shape.scale);
+							let shape_scale = vec_gd_to_na(body.scale).component_mul(&shape_scale);
+							let shape_scale = vec_na_to_gd(shape_scale);
 							let result = Index::read_shape(shape.index, |shape| {
-								let mut collider = ColliderBuilder::new(shape.shape().clone())
+								let mut collider = ColliderBuilder::new(shape.scaled(shape_scale))
 									.position(transform)
 									.build();
 								Body::set_shape_userdata(&mut collider, body_index, i as u32);
@@ -441,8 +448,12 @@ fn set_ray_pickable(body: Index, enable: bool) {
 }
 
 fn set_state(body: Index, state: i32, value: &Variant) {
-	let apply = |body: &mut RigidBody, state| match state {
-		State::Transform(trf) => body.set_position(transform_to_isometry(trf), true),
+	let apply = |scale: &mut _, body: &mut RigidBody, state| match state {
+		State::Transform(trf) => {
+			let (iso, scl) = transform_to_isometry_and_scale(&trf);
+			body.set_position(iso, true);
+			*scale = scl;
+		}
 		State::LinearVelocity(vel) => body.set_linvel(vec_gd_to_na(vel), true),
 		State::AngularVelocity(vel) => body.set_angvel(vec_gd_to_na(vel), true),
 		State::Sleeping(sleep) => body.activation.sleeping = sleep,
@@ -456,13 +467,14 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 	};
 
 	map_or_err!(body, map_body_mut, |body, _| {
+		let scale = &mut body.scale;
 		match State::new(state, value) {
 			Ok(state) => match &mut body.body {
 				Instance::Attached(body, space) => {
-					modify_rigid_body(*space, body.0, |body| apply(body, state))
+					modify_rigid_body(*space, body.0, |body| apply(scale, body, state))
 						.expect("Invalid body or space")
 				}
-				Instance::Loose(body) => apply(body, state),
+				Instance::Loose(body) => apply(scale, body, state),
 			},
 			Err(e) => eprintln!("Invalid state: {:?}", e),
 		}

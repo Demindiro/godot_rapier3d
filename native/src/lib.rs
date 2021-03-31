@@ -1,3 +1,4 @@
+#![feature(destructuring_assignment)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 

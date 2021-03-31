@@ -4,7 +4,7 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
-use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1};
+use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1, Point3};
 
 #[derive(Copy, Clone, Debug)]
 enum Type {
@@ -190,6 +190,38 @@ impl Shape {
 
 	pub fn shape(&self) -> &SharedShape {
 		&self.shape
+	}
+
+	/// Do a best effort to scale a collider appropriately
+	pub fn scaled(&self, scale: Vector3) -> SharedShape {
+		let scale = vec_gd_to_na(scale);
+		// TODO figure out the exact way each collider is scaled in Godot for consistency
+		// The colliders where the scale is not certain are left empty for now
+		match self.r#type {
+			Type::Heightmap => {
+				let hf = self.shape.as_heightfield().unwrap();
+				SharedShape::heightfield(hf.heights().clone(), hf.scale().component_mul(&scale))
+			}
+			Type::Convex => {
+				let cp = self.shape.as_convex_polyhedron().unwrap();
+				let cp_points = cp.points();
+				let mut verts = Vec::with_capacity(cp_points.len());
+				for v in cp_points.iter() {
+					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
+				}
+				SharedShape::convex_hull(&verts[..]).expect("Failed to scale convex hull")
+			}
+			Type::Concave => {
+				let tm = self.shape.as_trimesh().unwrap();
+				let tm_verts = tm.vertices();
+				let mut verts = Vec::with_capacity(tm_verts.len());
+				for v in tm_verts.iter() {
+					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
+				}
+				SharedShape::trimesh(verts, tm.indices().iter().map(|v| *v).collect())
+			}
+			_ => self.shape.clone(),
+		}
 	}
 }
 
