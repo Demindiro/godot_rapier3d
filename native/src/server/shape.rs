@@ -138,10 +138,10 @@ impl Shape {
 				let heights = e(data.get("heights").try_to_float32_array())?;
 				let heights = heights.read();
 				// TODO there are max_height and min_height, what are they for?
-				let mut map = DMatrix::zeros(depth, width);
+				let mut map = DMatrix::zeros(width, depth);
 				for x in 0..width {
 					for z in 0..depth {
-						map[(z, x)] = heights[x * depth + z];
+						map[(x, z)] = heights[x * depth + z];
 					}
 				}
 				SharedShape::heightfield(

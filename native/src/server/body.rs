@@ -207,6 +207,33 @@ impl Body {
 	pub fn object_id(&self) -> Option<ObjectID> {
 		self.object_id
 	}
+
+	/// Creates colliders according to shape enable status and transform
+	fn create_colliders(&self, index: u32) -> Vec<Option<Collider>> {
+		let mut colliders = Vec::with_capacity(self.shapes.len());
+		for (i, shape) in self.shapes.iter().enumerate() {
+			if shape.enabled {
+				let transform = shape.transform;
+				let shape_scale = transform.rotation * vec_gd_to_na(shape.scale);
+				let shape_scale = vec_gd_to_na(self.scale).component_mul(&shape_scale);
+				let shape_scale = vec_na_to_gd(shape_scale);
+				let result = Index::read_shape(shape.index, |shape| {
+					let mut collider = ColliderBuilder::new(shape.scaled(shape_scale))
+						.position(transform)
+						.build();
+					Body::set_shape_userdata(&mut collider, index, i as u32);
+					colliders.push(Some(collider));
+				});
+				if let Err(_) = result {
+					godot_error!("Shape is invalid: {}", shape.index);
+					colliders.push(None); // Make sure the collider count does still match
+				}
+			} else {
+				colliders.push(None);
+			}
+		}
+		colliders
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
@@ -375,31 +402,7 @@ fn set_space(body: Index, space: Option<Index>) {
 	if let Some(space) = space {
 		if let Ok(space) = space.map_space(|&v, _| v) {
 			let colliders = body
-				.map_body(|body, body_index| {
-					let mut colliders = Vec::with_capacity(body.shapes.len());
-					for (i, shape) in body.shapes.iter().enumerate() {
-						if shape.enabled {
-							let transform = shape.transform;
-							let shape_scale = transform.rotation * vec_gd_to_na(shape.scale);
-							let shape_scale = vec_gd_to_na(body.scale).component_mul(&shape_scale);
-							let shape_scale = vec_na_to_gd(shape_scale);
-							let result = Index::read_shape(shape.index, |shape| {
-								let mut collider = ColliderBuilder::new(shape.scaled(shape_scale))
-									.position(transform)
-									.build();
-								Body::set_shape_userdata(&mut collider, body_index, i as u32);
-								colliders.push(Some(collider));
-							});
-							if let Err(_) = result {
-								godot_error!("Shape is invalid: {}", shape.index);
-								colliders.push(None); // Make sure the collider count does still match
-							}
-						} else {
-							colliders.push(None);
-						}
-					}
-					colliders
-				})
+				.map_body(|body, index| body.create_colliders(index))
 				.expect("Body is invalid");
 			map_or_err!(body, map_body_mut, |body, _| {
 				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
@@ -466,17 +469,53 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 		}
 	};
 
-	map_or_err!(body, map_body_mut, |body, _| {
-		let scale = &mut body.scale;
+	map_or_err!(body, map_body_mut, |body, body_index| {
+		let mut scale = body.scale;
+		let mut scale_changed = false;
 		match State::new(state, value) {
 			Ok(state) => match &mut body.body {
-				Instance::Attached(body, space) => {
-					modify_rigid_body(*space, body.0, |body| apply(scale, body, state))
-						.expect("Invalid body or space")
+				Instance::Attached((rb, _), space) => {
+					let old_scale = scale;
+					modify_rigid_body(*space, *rb, |rb| apply(&mut scale, rb, state))
+						.expect("Invalid body or space");
+					if (old_scale.x - scale.x).abs() > 1e-6 || (old_scale.y - scale.y).abs() > 1e-6 || (old_scale.z - scale.z).abs() > 1e-6 {
+						scale_changed = true;
+						body.scale = scale;
+					}
 				}
-				Instance::Loose(body) => apply(scale, body, state),
+				Instance::Loose(rb) => {
+					apply(&mut scale, rb, state);
+					body.scale = scale;
+				}
 			},
 			Err(e) => eprintln!("Invalid state: {:?}", e),
+		}
+
+		// Recreating colliders is potentially very expensive, so avoid it when possible
+		// is_equal_approx (not implemented yet) should be close enough
+		if scale_changed {
+			body.recalculate_inertia();
+			let colliders = body.create_colliders(body_index);
+			if let Instance::Attached((rb, _), space) = &mut body.body {
+				crate::modify_space(*space, |space| {
+					// Removing the body also removes all of it's colliders
+					// FIXME this also removes all joints, so those need to be recreated
+					let rigid = space.bodies.remove(*rb, &mut space.colliders, &mut space.joints).expect("Invalid body");
+					*rb = space.bodies.insert(rigid);
+					let mut collider_handles = Vec::with_capacity(colliders.len());
+					for collider in colliders {
+						let handle = collider.map(|c| {
+							space
+								.colliders
+								.insert(c, *rb, &mut space.bodies)
+						});
+						collider_handles.push(handle);
+					}
+				})
+				.expect("Invalid space");
+			} else {
+				unreachable!();
+			}
 		}
 	});
 }
