@@ -206,11 +206,12 @@ impl Body {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.body_create(create);
-	ffi.body_attach_object_instance_id(attach_object_instance_id);
-	ffi.body_get_direct_state(get_direct_state);
+	ffi.body_add_force(add_force);
 	ffi.body_add_shape(add_shape);
 	ffi.body_apply_impulse(apply_impulse);
+	ffi.body_attach_object_instance_id(attach_object_instance_id);
+	ffi.body_create(create);
+	ffi.body_get_direct_state(get_direct_state);
 	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
@@ -229,6 +230,22 @@ fn create(r#type: i32, sleep: bool) -> Option<Index> {
 	}
 }
 
+fn add_force(body: Index, position: Vector3, force: Vector3) {
+	map_or_err!(body, map_body, |body, _| {
+		if let Instance::Attached((body, _), space) = &body.body {
+			space
+				.modify(|space| {
+					let body = space.bodies.get_mut(*body).expect("Invalid body handle");
+					let (position, force) = transform_force_arguments(body, position, force);
+					body.apply_force_at_point(force, position, true);
+				})
+				.expect("Invalid space handle");
+		} else {
+			godot_error!("Can't apply force to body outside space");
+		}
+	});
+}
+
 fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 	map_or_err!(body, map_body_mut, |body, _| {
 		if let Index::Shape(index) = shape {
@@ -245,11 +262,7 @@ fn apply_impulse(body: Index, position: Vector3, impulse: Vector3) {
 			space
 				.modify(|space| {
 					let body = space.bodies.get_mut(*body).expect("Invalid body handle");
-					let position = na::Point3::new(position.x, position.y, position.z);
-					// Godot's "It's local position but global rotation" is such a mindfuck
-					let tr = body.position().translation;
-					let position = position + na::Vector3::new(tr.x, tr.y, tr.z);
-					let impulse = vec_gd_to_na(impulse);
+					let (position, impulse) = transform_force_arguments(body, position, impulse);
 					body.apply_impulse_at_point(impulse, position, true);
 				})
 				.expect("Invalid space handle");
@@ -454,4 +467,14 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 			Err(e) => eprintln!("Invalid state: {:?}", e),
 		}
 	});
+}
+
+/// Godot's "It's local position but global rotation" is such a mindfuck that this function exists
+/// to help out
+fn transform_force_arguments(body: &RigidBody, position: Vector3, direction: Vector3) -> (na::Point3<f32>, na::Vector3<f32>) {
+	let position = na::Point3::new(position.x, position.y, position.z);
+	let tr = body.position().translation;
+	let position = position + na::Vector3::new(tr.x, tr.y, tr.z);
+	let direction = vec_gd_to_na(direction);
+	(position, direction)
 }
