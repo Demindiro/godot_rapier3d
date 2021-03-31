@@ -8,9 +8,10 @@ current_branch = subprocess.run(
     ['git', 'rev-parse', '--abbrev-ref', 'HEAD'], stdout=subprocess.PIPE
 ).stdout.decode('utf-8')
 
-if current_branch == 'cargo-only':
+if current_branch == 'cargo-only\n':
     print("Can't delete current branch")
-    os.exit(1)
+    import sys
+    sys.exit(1)
 
 os.system('git branch -D cargo-only')
 os.system('git checkout -b cargo-only')

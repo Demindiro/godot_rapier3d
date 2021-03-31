@@ -18,3 +18,20 @@ pub fn transform_to_isometry(transform: Transform) -> Isometry<f32> {
 	));
 	Isometry::from_parts(origin, rotation)
 }
+
+pub fn isometry_to_transform(isometry: &Isometry<f32>) -> Transform {
+	let origin = Vector3::new(
+		isometry.translation.x,
+		isometry.translation.y,
+		isometry.translation.z,
+	);
+	let rot = isometry.rotation.to_rotation_matrix();
+	let basis = Basis {
+		elements: [
+			Vector3::new(rot[(0, 0)], rot[(0, 1)], rot[(0, 2)]),
+			Vector3::new(rot[(1, 0)], rot[(1, 1)], rot[(1, 2)]),
+			Vector3::new(rot[(2, 0)], rot[(2, 1)], rot[(2, 2)]),
+		],
+	};
+	Transform { basis, origin }
+}

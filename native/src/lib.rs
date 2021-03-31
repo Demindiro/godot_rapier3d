@@ -20,6 +20,18 @@ use rapier3d::pipeline::{PhysicsPipeline, QueryPipeline};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+extern "C" {
+	fn feenableexcept(flags: i32);
+}
+
+/// Call this if you are getting NaN errors *somewhere*
+#[allow(dead_code)]
+fn enable_sigfpe() {
+	unsafe {
+		feenableexcept(9);
+	}
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SpaceHandle(usize);
 

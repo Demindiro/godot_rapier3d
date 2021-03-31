@@ -10,11 +10,24 @@ pub fn init(ffi: &mut ffi::FFI) {
 
 fn create() -> Option<Index> {
 	let index = Index::add_space(crate::create_space());
-	index.map_space(|space, _| space.set_index(Some(index))).unwrap().unwrap();
+	index
+		.map_space(|space, _| space.set_index(Some(index)))
+		.unwrap()
+		.unwrap();
 	Some(index)
 }
 
-fn intersect_ray(space: Index, info: &ffi::PhysicsRayInfo, result: &mut ffi::PhysicsRayResult) -> bool {
+fn intersect_ray(
+	space: Index,
+	info: &ffi::PhysicsRayInfo,
+	result: &mut ffi::PhysicsRayResult,
+) -> bool {
+	// TODO account for excluded colliders
+	// There are two ways to approach this
+	// - Make a separate ColliderSet without the excluded colliders (very likely very slow)
+	// - Use `intersections_with_ray`
+	// It probably makes sense to use `cast_ray_and_get_normal` if there are no excluded colliders,
+	// it is likely at least as fast as `intersections_with_ray`.
 	let mut collided = false;
 	map_or_err!(space, map_space, |space, _| space.modify(|space| {
 		space.update_query_pipeline();
@@ -32,7 +45,9 @@ fn intersect_ray(space: Index, info: &ffi::PhysicsRayInfo, result: &mut ffi::Phy
 			InteractionGroups::new(u16::MAX, info.collision_mask() as u16),
 		);
 		if let Some((collider, intersection)) = intersection {
-			result.set_position(dir * intersection.toi + from);
+			//let point = dir.mul_add(intersection.toi, from); // Faster & more accurate
+			let point = dir * intersection.toi + from; // MulAdd not implemented for the above :(
+			result.set_position(point);
 			result.set_normal(vec_na_to_gd(intersection.normal));
 			let collider = space.colliders.get(collider).unwrap();
 			if let Some((body, shape)) = body::Body::get_shape_userdata(collider) {
@@ -50,9 +65,4 @@ fn intersect_ray(space: Index, info: &ffi::PhysicsRayInfo, result: &mut ffi::Phy
 	collided
 }
 
-fn set_active(index: Index, active: bool) {
-	println!(
-		"Then God actived the World, even though it is a no-op {:?} {}",
-		index, active
-	);
-}
+fn set_active(index: Index, active: bool) {}

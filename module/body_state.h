@@ -12,7 +12,12 @@ extern "C" {
 
 struct physics_body_state {
 	godot_transform transform;
+	godot_vector3 linear_velocity;
+	godot_vector3 angular_velocity;
+	godot_vector3 center_of_mass;
+	real_t inv_mass;
 	index_t space;
+	bool sleeping;
 };
 
 #ifdef __cplusplus
@@ -38,6 +43,7 @@ class PluggablePhysicsDirectBodyState : public PhysicsDirectBodyState {
 	index_t body;
 	PluggablePhysicsServer *server;
 	PluggablePhysicsDirectSpaceState *space_state_singleton;
+	real_t delta;
 
 public:
 	virtual Vector3 get_total_gravity() const;

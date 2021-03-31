@@ -4,9 +4,9 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
-use rapier3d::na::{Dynamic, Matrix, Matrix3x1};
+use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum Type {
 	Plane,
 	Ray,
@@ -138,13 +138,16 @@ impl Shape {
 				let heights = e(data.get("heights").try_to_float32_array())?;
 				let heights = heights.read();
 				// TODO there are max_height and min_height, what are they for?
-				let mut map = Matrix::<_, Dynamic, Dynamic, _>::zeros(width, depth);
+				let mut map = DMatrix::zeros(depth, width);
 				for x in 0..width {
 					for z in 0..depth {
-						map[(x, z)] = heights[x * depth + z];
+						map[(z, x)] = heights[x * depth + z];
 					}
 				}
-				SharedShape::heightfield(map, na::Vector3::new(1.0, 1.0, 1.0))
+				SharedShape::heightfield(
+					map,
+					na::Vector3::new(depth as f32 - 1.0, 1.0, width as f32 - 1.0),
+				)
 			}
 			Type::Plane => {
 				// TODO figure out a way to implement planes
@@ -177,9 +180,10 @@ impl Shape {
 				if let Type::Concave = self.r#type {
 					SharedShape::trimesh(verts, indices)
 				} else {
-					SharedShape::convex_mesh(verts, &indices).ok_or(ShapeError::ConvexNotManifold)?
+					SharedShape::convex_mesh(verts, &indices)
+						.ok_or(ShapeError::ConvexNotManifold)?
 				}
-			},
+			}
 		};
 		Ok(())
 	}

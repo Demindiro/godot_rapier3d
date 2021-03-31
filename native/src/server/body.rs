@@ -1,7 +1,9 @@
 use super::*;
 use gdnative::core_types::*;
 use gdnative::sys;
-use rapier3d::dynamics::{ActivationStatus, RigidBody, RigidBodyBuilder, RigidBodyHandle};
+use rapier3d::dynamics::{
+	ActivationStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
+};
 use rapier3d::geometry::{ColliderBuilder, ColliderHandle};
 use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
@@ -13,6 +15,16 @@ enum Type {
 	Kinematic,
 	Rigid,
 	Character,
+}
+
+#[derive(Debug)]
+enum Param {
+	Bounce(f32),
+	Friction(f32),
+	Mass(f32),
+	GravityScale(f32),
+	LinearDamp(f32),
+	AngularDamp(f32),
 }
 
 #[derive(Debug)]
@@ -62,6 +74,20 @@ impl Type {
 		}
 		.sleeping(sleep)
 		.build()
+	}
+}
+
+impl Param {
+	fn new(n: i32, value: f32) -> Result<Param, ()> {
+		Ok(match n {
+			0 => Self::Bounce(value),
+			1 => Self::Friction(value),
+			2 => Self::Mass(value),
+			3 => Self::GravityScale(value),
+			4 => Self::LinearDamp(value),
+			5 => Self::AngularDamp(value),
+			_ => return Err(()),
+		})
 	}
 }
 
@@ -120,13 +146,51 @@ impl Body {
 			index,
 			transform: transform_to_isometry(*transform),
 			enabled,
-		})
+		});
+		self.recalculate_inertia();
+	}
+
+	/// Recalculates the inertia based on all active shapes
+	fn recalculate_inertia(&mut self) {
+		let shapes = &self.shapes;
+		// TODO avoid calculating the MassProperties twice
+		let calc_mp = |body: &mut RigidBody| {
+			let mut mp = Vec::with_capacity(shapes.len());
+			for shape in shapes.iter() {
+				if shape.enabled {
+					let trf = shape.transform;
+					let shape = Index::read_shape(shape.index, |shape| shape.shape().clone())
+						.expect("Invalid shape index");
+					mp.push((trf, shape));
+				}
+			}
+			let mp_f = MassProperties::from_compound(1.0, &mp[..]);
+			let ratio = mp_f.inv_mass / body.mass_properties().inv_mass;
+			let mut mp = MassProperties::from_compound(ratio, &mp[..]);
+			// Workaround for https://github.com/dimforge/parry/issues/20
+			if mp.local_com.x.is_nan() || mp.local_com.x.is_infinite() {
+				mp.local_com = na::Point3::new(0.0, 0.0, 0.0);
+			};
+			mp.inv_mass = body.mass_properties().inv_mass;
+			body.set_mass_properties(mp, true);
+		};
+		match &mut self.body {
+			Instance::Attached((body, _), space) => {
+				space
+					.modify(|space| {
+						calc_mp(space.bodies.get_mut(*body).expect("Invalid body handle"))
+					})
+					.expect("Invalid space handle");
+			}
+			Instance::Loose(body) => calc_mp(body),
+		}
 	}
 
 	// FIXME encode the data in such a way that non-Godot colliders don't get mixed with the ones
 	// created by Godot
 	fn set_shape_userdata(collider: &mut Collider, body_index: u32, shape_index: u32) {
-		collider.user_data &= !(u64::MAX as u128) | (body_index as u128) | ((shape_index as u128) << 32);
+		collider.user_data &=
+			!(u64::MAX as u128) | (body_index as u128) | ((shape_index as u128) << 32);
 	}
 
 	// FIXME ditto
@@ -146,6 +210,8 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_attach_object_instance_id(attach_object_instance_id);
 	ffi.body_get_direct_state(get_direct_state);
 	ffi.body_add_shape(add_shape);
+	ffi.body_apply_impulse(apply_impulse);
+	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
 	ffi.body_set_space(set_space);
@@ -173,6 +239,26 @@ fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 	});
 }
 
+fn apply_impulse(body: Index, position: Vector3, impulse: Vector3) {
+	map_or_err!(body, map_body, |body, _| {
+		if let Instance::Attached((body, _), space) = &body.body {
+			space
+				.modify(|space| {
+					let body = space.bodies.get_mut(*body).expect("Invalid body handle");
+					let position = na::Point3::new(position.x, position.y, position.z);
+					// Godot's "It's local position but global rotation" is such a mindfuck
+					let tr = body.position().translation;
+					let position = position + na::Vector3::new(tr.x, tr.y, tr.z);
+					let impulse = vec_gd_to_na(impulse);
+					body.apply_impulse_at_point(impulse, position, true);
+				})
+				.expect("Invalid space handle");
+		} else {
+			godot_error!("Can't apply impulse to body outside space");
+		}
+	});
+}
+
 fn attach_object_instance_id(body: Index, id: u32) {
 	map_or_err!(body, map_body_mut, |v, _| v.object_id = ObjectID::new(id));
 }
@@ -181,9 +267,23 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 	map_or_err!(body, map_body, |body, _| {
 		match &body.body {
 			Instance::Attached((body, _), space) => {
-				let transform = crate::get_transform(*space, *body).expect("Invalid body or space");
-				state.set_transform(&transform);
-				state.set_space(space.index().expect("Invalid space").expect("Space has no index"));
+				space
+					.read(|s| {
+						let body = s.bodies.get(*body).expect("Invalid body handle");
+						let transform = isometry_to_transform(body.position());
+						state.set_transform(&isometry_to_transform(body.position()));
+						state.set_space(
+							space
+								.index()
+								.expect("Invalid space")
+								.expect("Space has no index"),
+						);
+						state.set_linear_velocity(vec_na_to_gd(*body.linvel()));
+						state.set_angular_velocity(vec_na_to_gd(*body.angvel()));
+						state.set_sleeping(body.is_sleeping());
+						state.set_inv_mass(body.mass_properties().inv_mass);
+					})
+					.expect("Invalid space");
 			}
 			Instance::Loose(_) => {}
 		}
@@ -204,6 +304,40 @@ fn remove_shape(body: Index, shape: i32) {
 			})
 			.expect("Failed to modify space");
 		}
+	});
+}
+
+fn set_param(body: Index, param: i32, value: f32) {
+	let param = if let Ok(param) = Param::new(param, value) {
+		param
+	} else {
+		godot_error!("Invalid param");
+		return;
+	};
+	let f = |body: &mut RigidBody| match param {
+		Param::Mass(mass) => {
+			let mut p = *body.mass_properties();
+			p.inv_mass = 1.0 / mass;
+			body.set_mass_properties(p, true);
+		}
+		Param::LinearDamp(damp) => body.linear_damping = damp,
+		Param::AngularDamp(damp) => body.angular_damping = damp,
+		Param::Bounce(bounce) => godot_error!("TODO bounce"),
+		Param::Friction(friction) => godot_error!("TODO friction"),
+		Param::GravityScale(scale) => body.set_gravity_scale(scale, true),
+	};
+	map_or_err!(body, map_body_mut, |body, _| {
+		match &mut body.body {
+			Instance::Attached((body, _), space) => {
+				space
+					.modify(|space| f(space.bodies.get_mut(*body).expect("Invalid body handle")))
+					.expect("Invalid space handle");
+			}
+			Instance::Loose(body) => {
+				f(body);
+			}
+		}
+		body.recalculate_inertia();
 	});
 }
 
@@ -249,6 +383,7 @@ fn set_space(body: Index, space: Option<Index>) {
 				.expect("Body is invalid");
 			map_or_err!(body, map_body_mut, |body, _| {
 				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
+				body.recalculate_inertia();
 				let b = mem::replace(&mut body.body, b);
 				body.body = match b {
 					Instance::Attached(_, _) => todo!(),
