@@ -4,6 +4,7 @@ use rapier3d::na::Point3;
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi.space_create(create);
+	ffi.space_is_active(is_active);
 	ffi.space_set_active(set_active);
 	ffi.space_intersect_ray(intersect_ray);
 }
@@ -65,4 +66,16 @@ fn intersect_ray(
 	collided
 }
 
-fn set_active(index: Index, active: bool) {}
+fn set_active(space: Index, active: bool) {
+	map_or_err!(space, map_space, |space, _| space.modify(|space| space.enabled = active).expect("Invalid space"));
+}
+
+fn is_active(space: Index) -> bool {
+	let result = space.map_space(|space, _| space.read(|space| space.enabled).expect("Invalid space"));
+	if let Ok(active) = result {
+		active
+	} else {
+		godot_error!("RID does not point to a space");
+		false
+	}
+}

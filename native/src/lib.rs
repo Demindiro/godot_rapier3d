@@ -63,6 +63,7 @@ struct World3D {
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
 	index: Option<Index>,
+	enabled: bool,
 }
 
 struct BodyExclusionHooks {
@@ -231,7 +232,7 @@ macro_rules! get_world_to_space_mut {
 
 fn step_all_spaces(delta: f32) {
 	let mut worlds = SPACES.write().expect("Failed to write to WORLDS");
-	for world in worlds.iter_mut().filter_map(Option::as_mut) {
+	for world in worlds.iter_mut().filter_map(Option::as_mut).filter(|w| w.enabled) {
 		world.step(delta);
 	}
 }
@@ -330,6 +331,7 @@ fn create_world() -> World3D {
 		event_handler: (),
 		query_pipeline_out_of_date: false,
 		index: None,
+		enabled: true,
 	}
 }
 
