@@ -175,7 +175,6 @@ impl Body {
 			if mp.local_com.x.is_nan() || mp.local_com.x.is_infinite() {
 				mp.local_com = na::Point3::new(0.0, 0.0, 0.0);
 			};
-			mp.inv_mass = body.mass_properties().inv_mass;
 			body.set_mass_properties(mp, true);
 		};
 		match &mut self.body {
