@@ -95,17 +95,17 @@ fn create_hinge(
 
 	let basis_a = transform_a.basis;
 	let basis_b = transform_b.basis;
-	let axis_a = basis_a.elements[0];
-	let axis_b = basis_b.elements[0];
+	let axis_a = basis_a.elements[2];
+	let axis_b = basis_b.elements[2];
 	let axis_a = Unit::new_normalize(vec_gd_to_na(axis_a));
 	let axis_b = Unit::new_normalize(vec_gd_to_na(axis_b));
 	let basis_a = [
+		vec_gd_to_na(basis_a.elements[0]),
 		vec_gd_to_na(basis_a.elements[1]),
-		vec_gd_to_na(basis_a.elements[2]),
 	];
 	let basis_b = [
+		vec_gd_to_na(basis_b.elements[0]),
 		vec_gd_to_na(basis_b.elements[1]),
-		vec_gd_to_na(basis_b.elements[2]),
 	];
 
 	let mut joint = RevoluteJoint::new(origin_a, axis_a, origin_b, axis_b);
