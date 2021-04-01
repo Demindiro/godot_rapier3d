@@ -3,7 +3,7 @@ use crate::vec_gd_to_na;
 use core::mem;
 use gdnative::core_types::*;
 use gdnative::sys;
-use rapier3d::dynamics::{self, JointHandle, JointParams, RevoluteJoint};
+use rapier3d::dynamics::{self, JointHandle, JointParams, RevoluteJoint, SpringModel};
 use rapier3d::math::{Point, Vector};
 use rapier3d::na::Unit;
 
@@ -15,6 +15,28 @@ struct LooseJoint {
 	params: JointParams,
 	body_a: u32,
 	body_b: u32,
+}
+
+#[derive(Debug)]
+enum HingeParam {
+	Bias(f32),
+	LimitUpper(f32),
+	LimitLower(f32),
+	LimitBias(f32),
+	LimitSoftness(f32),
+	LimitRelaxation(f32),
+	MotorTargetVelocity(f32),
+	MotorMaxImpulse(f32),
+}
+
+enum HingeFlag {
+	UseLimit(bool),
+	EnableMotor(bool),
+}
+
+#[derive(Debug)]
+enum ParamError {
+	InvalidParam(i32),
 }
 
 impl Joint {
@@ -65,8 +87,36 @@ impl Joint {
 	}
 }
 
+impl HingeParam {
+	fn new(n: i32, value: f32) -> Result<HingeParam, ParamError> {
+		Ok(match n {
+			0 => Self::Bias(value),
+			1 => Self::LimitUpper(value),
+			2 => Self::LimitLower(value),
+			3 => Self::LimitBias(value),
+			4 => Self::LimitSoftness(value),
+			5 => Self::LimitRelaxation(value),
+			6 => Self::MotorTargetVelocity(value),
+			7 => Self::MotorMaxImpulse(value),
+			_ => return Err(ParamError::InvalidParam(n)),
+		})
+	}
+}
+
+impl HingeFlag {
+	fn new(n: i32, value: bool) -> Result<HingeFlag, ParamError> {
+		Ok(match n {
+			0 => Self::UseLimit(value),
+			1 => Self::EnableMotor(value),
+			_ => return Err(ParamError::InvalidParam(n)),
+		})
+	}
+}
+
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi.joint_create_hinge(create_hinge);
+	ffi.hinge_joint_set_flag(set_hinge_flag);
+	ffi.hinge_joint_set_param(set_hinge_param);
 }
 
 fn create_hinge(
@@ -113,4 +163,98 @@ fn create_hinge(
 	joint.basis2 = basis_b;
 
 	Some(Index::add_joint(Joint::new(joint, body_a, body_b)))
+}
+
+fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
+	let flag = match HingeFlag::new(flag, value) {
+		Ok(f) => f,
+		Err(e) => {
+			godot_error!("Failed to apply hinge joint parameter: {:?}", e);
+			return;
+		}
+	};
+	let apply = |joint: &mut JointParams| {
+		if let JointParams::RevoluteJoint(j) = joint {
+			match flag {
+				HingeFlag::UseLimit(_) => godot_error!("TODO"),
+				HingeFlag::EnableMotor(v) => {
+					j.motor_model = if v {
+						SpringModel::default()
+					} else {
+						SpringModel::Disabled
+					}
+				}
+			}
+		} else {
+			godot_error!("Joint is not a hinge joint");
+		}
+	};
+	map_or_err!(joint, map_joint_mut, |joint, _| {
+		match &mut joint.joint {
+			Instance::Attached(jh, space) => {
+				space
+					.modify(|space| {
+						apply(
+							&mut space
+								.joints
+								.get_mut(*jh)
+								.expect("Invalid joint handle")
+								.params,
+						);
+					})
+					.expect("Invalid space");
+			}
+			Instance::Loose(j) => apply(&mut j.params),
+		}
+	});
+}
+
+fn set_hinge_param(joint: Index, param: i32, value: f32) {
+	let param = match HingeParam::new(param, value) {
+		Ok(p) => p,
+		Err(e) => {
+			godot_error!("Failed to apply hinge joint parameter: {:?}", e);
+			return;
+		}
+	};
+	let apply = |joint: &mut JointParams| {
+		if let JointParams::RevoluteJoint(j) = joint {
+			let e = || godot_error!("TODO");
+			match param {
+				// FIXME it seems this parameter doesn't exist in nphysics3d either. How should
+				// we handle it?
+				HingeParam::Bias(_) => e(),
+				HingeParam::LimitBias(_) => e(),
+				// FIXME it seems there are no configurable limits on hinge joints?
+				// Judging by the nphysics3d documentation and the fact Rapier is a successor,
+				// it will hopefully be implemented soon.
+				HingeParam::LimitUpper(_) => e(),
+				HingeParam::LimitLower(_) => e(),
+				HingeParam::LimitSoftness(_) => e(),
+				HingeParam::LimitRelaxation(_) => e(),
+				HingeParam::MotorTargetVelocity(v) => j.configure_motor_velocity(v, 1.0),
+				HingeParam::MotorMaxImpulse(v) => j.motor_max_impulse = v,
+			}
+		} else {
+			godot_error!("Joint is not a hinge joint");
+		}
+	};
+	map_or_err!(joint, map_joint_mut, |joint, _| {
+		match &mut joint.joint {
+			Instance::Attached(jh, space) => {
+				space
+					.modify(|space| {
+						apply(
+							&mut space
+								.joints
+								.get_mut(*jh)
+								.expect("Invalid joint handle")
+								.params,
+						);
+					})
+					.expect("Invalid space");
+			}
+			Instance::Loose(j) => apply(&mut j.params),
+		}
+	});
 }
