@@ -6,7 +6,7 @@ mod shape;
 mod space;
 
 use crate::*;
-use body::Body;
+pub use body::Body;
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
@@ -205,12 +205,13 @@ impl Index {
 		SpaceHandle
 	);
 
-	fn remove(self) -> Result<Type, IndexError> {
+	fn remove(self) -> Result<(), IndexError> {
 		match self {
-			Index::Body(_) => self.remove_body().map(Type::Body),
-			Index::Joint(_) => self.remove_joint().map(Type::Joint),
-			Index::Shape(_) => self.remove_shape().map(Type::Shape),
-			Index::Space(_) => self.remove_space().map(Type::Space),
+			Index::Body(_) => self.remove_body().map(Body::free),
+			Index::Joint(_) => self.remove_joint().map(Joint::free),
+			Index::Shape(_) => self.remove_shape().map(Shape::free),
+			// TODO the space <-> "world" mapping is a mess, so skip for now.
+			Index::Space(_) => self.remove_space().map(|_| ()), //.map(Space::free),
 		}
 	}
 

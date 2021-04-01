@@ -223,6 +223,12 @@ impl Shape {
 			_ => self.shape.clone(),
 		}
 	}
+
+	/// Frees this shape, removing it from any attached rigidbodies
+	pub fn free(self) {
+		// FIXME we need to track attached bodies to remove the corresponding shapes
+		godot_error!("TODO free shape");
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {

@@ -85,6 +85,18 @@ impl Joint {
 			}
 		}
 	}
+
+	/// Frees this hinge, removing it from it's attached bodies (if any)
+	pub fn free(mut self) {
+		match &mut self.joint {
+			Instance::Attached(jh, space) => {
+				space
+					.modify(|space| space.joints.remove(*jh, &mut space.bodies, true))
+					.expect("Invalid space");
+			}
+			Instance::Loose(_) => {}
+		}
+	}
 }
 
 impl HingeParam {
@@ -137,14 +149,15 @@ fn create_hinge(
 		godot_error!("ID B does not point to a body");
 		return None;
 	};
+	dbg!(transform_a, transform_b);
 
 	let origin_a = transform_a.origin;
 	let origin_b = transform_b.origin;
 	let origin_a = Point::new(origin_a.x, origin_a.y, origin_a.z);
 	let origin_b = Point::new(origin_b.x, origin_b.y, origin_b.z);
 
-	let basis_a = transform_a.basis;
-	let basis_b = transform_b.basis;
+	let basis_a = transform_a.basis.transposed();
+	let basis_b = transform_b.basis.transposed();
 	let axis_a = basis_a.elements[2];
 	let axis_b = basis_b.elements[2];
 	let axis_a = Unit::new_normalize(vec_gd_to_na(axis_a));
@@ -232,7 +245,7 @@ fn set_hinge_param(joint: Index, param: i32, value: f32) {
 				HingeParam::LimitLower(_) => e(),
 				HingeParam::LimitSoftness(_) => e(),
 				HingeParam::LimitRelaxation(_) => e(),
-				HingeParam::MotorTargetVelocity(v) => j.configure_motor_velocity(v, 1.0),
+				HingeParam::MotorTargetVelocity(v) => j.configure_motor_velocity(-v, 1.0),
 				HingeParam::MotorMaxImpulse(v) => j.motor_max_impulse = v,
 			}
 		} else {

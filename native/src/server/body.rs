@@ -54,6 +54,7 @@ pub struct Body {
 	object_id: Option<ObjectID>,
 	shapes: Vec<Shape>,
 	scale: Vector3,
+	exclusions: Vec<u32>,
 }
 
 impl Type {
@@ -113,6 +114,7 @@ impl Body {
 			object_id: None,
 			shapes: Vec::new(),
 			scale: Vector3::one(),
+			exclusions: Vec::new(),
 		}
 	}
 
@@ -135,9 +137,11 @@ impl Body {
 		}
 	}
 
+	/// Store the given index in the userdata
 	fn set_index(&mut self, index: u32) {
 		if let Instance::Loose(body) = &mut self.body {
-			body.user_data &= !(u32::MAX as u128) | index as u128;
+			body.user_data &= !(u32::MAX as u128);
+			body.user_data |= index as u128;
 		} else {
 			// Indices shouldn't be able to change after being attached
 			unreachable!();
@@ -192,8 +196,8 @@ impl Body {
 	// FIXME encode the data in such a way that non-Godot colliders don't get mixed with the ones
 	// created by Godot
 	fn set_shape_userdata(collider: &mut Collider, body_index: u32, shape_index: u32) {
-		collider.user_data &=
-			!(u64::MAX as u128) | (body_index as u128) | ((shape_index as u128) << 32);
+		collider.user_data &= !(u64::MAX as u128);
+		collider.user_data |= (body_index as u128) | ((shape_index as u128) << 32);
 	}
 
 	// FIXME ditto
@@ -233,31 +237,82 @@ impl Body {
 		}
 		colliders
 	}
+
+	/// Get the index from the given body's userdata
+	pub fn get_index(body: &RigidBody) -> u32 {
+		(body.user_data & (u32::MAX as u128)) as u32
+	}
+
+	/// Frees this body, removing it from it's attached space (if any)
+	pub fn free(self) {
+		if let Instance::Attached((rb, _), space) = &self.body {
+			space
+				.modify(|space| {
+					space
+						.bodies
+						.remove(*rb, &mut space.colliders, &mut space.joints)
+				})
+				.expect("Invalid space");
+		}
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_add_force(add_force);
 	ffi.body_add_shape(add_shape);
+	ffi.body_add_collision_exception(add_collision_exception);
 	ffi.body_apply_impulse(apply_impulse);
 	ffi.body_attach_object_instance_id(attach_object_instance_id);
 	ffi.body_create(create);
 	ffi.body_get_direct_state(get_direct_state);
+	ffi.body_remove_shape(remove_shape);
 	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
 	ffi.body_set_space(set_space);
 	ffi.body_set_state(set_state);
 	ffi.body_set_ray_pickable(set_ray_pickable);
-	ffi.body_remove_shape(remove_shape);
 }
 
 fn create(r#type: i32, sleep: bool) -> Option<Index> {
 	if let Ok(r#type) = Type::new(r#type) {
-		Some(Index::add_body(Body::new(r#type, sleep)))
+		let index = Index::add_body(Body::new(r#type, sleep));
+		index.map_body_mut(|b, i| b.set_index(i)).unwrap();
+		Some(index)
 	} else {
 		godot_error!("Invalid body type");
 		None
 	}
+}
+
+fn add_collision_exception(body_a: Index, body_b: Index) {
+	map_or_err!(body_a, map_body_mut, |body_a, index_a| {
+		if let Index::Body(index_b) = body_b {
+			if !body_a.exclusions.contains(&index_b) {
+				body_a.exclusions.push(index_b);
+				if let Instance::Attached((rb, _), space) = &body_a.body {
+					space
+						.modify(|space| {
+							space.body_exclusions.add_exclusion(index_a, index_b);
+						})
+						.expect("Invalid space");
+				}
+				godot_warn!("Success A -> B");
+			} else {
+				godot_error!("Body A already excludes B");
+			}
+		}
+	});
+	map_or_err!(body_b, map_body_mut, |body_b, index_b| {
+		if let Index::Body(index_a) = body_a {
+			if !body_b.exclusions.contains(&index_a) {
+				body_b.exclusions.push(index_a);
+				godot_warn!("Success B -> A");
+			} else {
+				godot_error!("Body B already excludes A");
+			}
+		}
+	});
 }
 
 fn add_force(body: Index, force: Vector3, position: Vector3) {
@@ -386,9 +441,11 @@ fn set_param(body: Index, param: i32, value: f32) {
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
-	map_or_err!(body, map_body_mut, |v, _| v
-		.map_shape_mut(shape, |v| (v.transform, v.scale) =
-			transform_to_isometry_and_scale(transform)));
+	map_or_err!(body, map_body_mut, |v, _| v.map_shape_mut(shape, |v| (
+		v.transform,
+		v.scale
+	) =
+		transform_to_isometry_and_scale(transform)));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
@@ -403,7 +460,8 @@ fn set_space(body: Index, space: Option<Index>) {
 			let colliders = body
 				.map_body(|body, index| body.create_colliders(index))
 				.expect("Body is invalid");
-			map_or_err!(body, map_body_mut, |body, _| {
+			map_or_err!(body, map_body_mut, |body, body_index| {
+				// FIXME remove exceptions
 				let b = Instance::Attached((RigidBodyHandle::invalid(), Vec::new()), space);
 				body.recalculate_inertia();
 				let b = mem::replace(&mut body.body, b);
@@ -422,6 +480,9 @@ fn set_space(body: Index, space: Option<Index>) {
 								});
 								collider_handles.push(handle);
 							}
+							for &exclude in body.exclusions.iter() {
+								space.body_exclusions.add_exclusion(body_index, exclude);
+							}
 						})
 						.expect("Invalid space");
 						Instance::Attached((handle.unwrap(), collider_handles), space)
@@ -430,6 +491,7 @@ fn set_space(body: Index, space: Option<Index>) {
 			});
 		}
 	} else {
+		// FIXME remove exceptions
 		map_or_err!(body, map_body_mut, |body, _| match body.body {
 			Instance::Attached((body, _), space) => {
 				crate::modify_space(space, |space| {
@@ -477,7 +539,10 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 					let old_scale = scale;
 					modify_rigid_body(*space, *rb, |rb| apply(&mut scale, rb, state))
 						.expect("Invalid body or space");
-					if (old_scale.x - scale.x).abs() > 1e-6 || (old_scale.y - scale.y).abs() > 1e-6 || (old_scale.z - scale.z).abs() > 1e-6 {
+					if (old_scale.x - scale.x).abs() > 1e-6
+						|| (old_scale.y - scale.y).abs() > 1e-6
+						|| (old_scale.z - scale.z).abs() > 1e-6
+					{
 						scale_changed = true;
 						body.scale = scale;
 					}
@@ -499,15 +564,15 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 				crate::modify_space(*space, |space| {
 					// Removing the body also removes all of it's colliders
 					// FIXME this also removes all joints, so those need to be recreated
-					let rigid = space.bodies.remove(*rb, &mut space.colliders, &mut space.joints).expect("Invalid body");
+					let rigid = space
+						.bodies
+						.remove(*rb, &mut space.colliders, &mut space.joints)
+						.expect("Invalid body");
 					*rb = space.bodies.insert(rigid);
 					let mut collider_handles = Vec::with_capacity(colliders.len());
 					for collider in colliders {
-						let handle = collider.map(|c| {
-							space
-								.colliders
-								.insert(c, *rb, &mut space.bodies)
-						});
+						let handle =
+							collider.map(|c| space.colliders.insert(c, *rb, &mut space.bodies));
 						collider_handles.push(handle);
 					}
 				})
@@ -521,7 +586,11 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 
 /// Godot's "It's local position but global rotation" is such a mindfuck that this function exists
 /// to help out
-fn transform_force_arguments(body: &RigidBody, position: Vector3, direction: Vector3) -> (na::Point3<f32>, na::Vector3<f32>) {
+fn transform_force_arguments(
+	body: &RigidBody,
+	position: Vector3,
+	direction: Vector3,
+) -> (na::Point3<f32>, na::Vector3<f32>) {
 	let position = na::Point3::new(position.x, position.y, position.z);
 	let tr = body.position().translation;
 	let position = position + na::Vector3::new(tr.x, tr.y, tr.z);

@@ -59,6 +59,8 @@ API_CUSTOM_FUNCTIONS = {
 
 # Functions for which to validate all RIDs
 VALIDATE_ALL_RIDS = {
+    'body_add_collision_exception',
+    'body_remove_collision_exception',
     'body_add_shape',
     'joint_create_cone_twist',
     'joint_create_generic_6dof',

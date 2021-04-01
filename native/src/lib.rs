@@ -16,8 +16,13 @@ use lazy_static::lazy_static;
 use rapier3d::dynamics::{
 	IntegrationParameters, JointSet, RigidBody, RigidBodyHandle, RigidBodySet,
 };
-use rapier3d::geometry::{BroadPhase, Collider, ColliderHandle, ColliderSet, NarrowPhase};
-use rapier3d::pipeline::{PhysicsPipeline, QueryPipeline};
+use rapier3d::geometry::{
+	BroadPhase, Collider, ColliderHandle, ColliderSet, NarrowPhase, SolverFlags,
+};
+use rapier3d::pipeline::{
+	ContactModificationContext, PairFilterContext, PhysicsHooks, PhysicsHooksFlags,
+	PhysicsPipeline, QueryPipeline,
+};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
@@ -54,10 +59,17 @@ struct World3D {
 	bodies: RigidBodySet,
 	colliders: ColliderSet,
 	joints: JointSet,
-	physics_hooks: (),
+	body_exclusions: BodyExclusionHooks,
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
 	index: Option<Index>,
+}
+
+struct BodyExclusionHooks {
+	// Reasoning for using Vec and Box instead of HashMap & HashSet:
+	// * Arena is likely densely packed -> not many "holes" in the Vec.
+	// * Amount of body exclusions is likely small -> Vec is compact and maybe faster.
+	exclusions: Vec<Vec<u32>>,
 }
 
 #[derive(NativeClass)]
@@ -94,7 +106,7 @@ impl World3D {
 			&mut self.bodies,
 			&mut self.colliders,
 			&mut self.joints,
-			&self.physics_hooks,
+			&self.body_exclusions,
 			&self.event_handler,
 		);
 		self.query_pipeline_out_of_date = true;
@@ -147,6 +159,66 @@ impl SpaceHandle {
 	fn set_index(&self, index: Option<server::Index>) -> Result<(), ()> {
 		self.modify(|space| space.index = index)
 	}
+}
+
+impl BodyExclusionHooks {
+	fn new() -> Self {
+		Self {
+			exclusions: Vec::new(),
+		}
+	}
+
+	fn add_exclusion(&mut self, index_a: u32, index_b: u32) {
+		// TODO how should we handle self-exclusions? (index_a == index_b)
+		let (a, b) = (index_a, index_b);
+		let (a, b) = if a < b { (a, b) } else { (b, a) };
+		if let Some(vec) = self.exclusions.get_mut(a as usize) {
+			//assert!(!vec.contains(&b));
+			vec.push(b);
+		} else {
+			self.exclusions.resize_with(a as usize + 1, || Vec::new());
+			self.exclusions[a as usize] = Vec::from([b]);
+		}
+	}
+
+	fn remove_exclusion(&mut self, index_a: u32, index_b: u32) {
+		let (a, b) = (index_a, index_b);
+		let (a, b) = if a < b { (a, b) } else { (b, a) };
+		if let Some(vec) = self.exclusions.get_mut(a as usize) {
+			vec.swap_remove(
+				vec.iter()
+					.position(|&e| e == b)
+					.expect("B not found in A's exclusions"),
+			);
+		} else {
+			panic!("A has no exclusions");
+		}
+	}
+}
+
+impl PhysicsHooks for BodyExclusionHooks {
+	fn active_hooks(&self) -> PhysicsHooksFlags {
+		PhysicsHooksFlags::FILTER_CONTACT_PAIR
+	}
+
+	fn filter_contact_pair(&self, context: &PairFilterContext) -> Option<SolverFlags> {
+		let body_a = server::Body::get_index(context.rigid_body1);
+		let body_b = server::Body::get_index(context.rigid_body2);
+		if let Some(indices) = self.exclusions.get(body_a as usize) {
+			for &i in indices.iter() {
+				if i == body_b {
+					return None;
+				}
+			}
+		}
+		Some(SolverFlags::default())
+	}
+
+	fn filter_intersection_pair(&self, _: &PairFilterContext) -> bool {
+		false
+	}
+
+	fn modify_solver_contacts(&self, _: &mut ContactModificationContext) {}
 }
 
 macro_rules! get_world_to_space_mut {
@@ -254,8 +326,7 @@ fn create_world() -> World3D {
 		bodies: RigidBodySet::new(),
 		colliders: ColliderSet::new(),
 		joints: JointSet::new(),
-		// We ignore physics hooks and contact events for now.
-		physics_hooks: (),
+		body_exclusions: BodyExclusionHooks::new(),
 		event_handler: (),
 		query_pipeline_out_of_date: false,
 		index: None,
