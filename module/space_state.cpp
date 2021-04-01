@@ -12,6 +12,7 @@ void PluggablePhysicsDirectSpaceState::_bind_methods() {
 */
 
 int PluggablePhysicsDirectSpaceState::intersect_point(const Vector3 &point, ShapeResult *r_results, int result_max, const Set<RID> &exclude, uint32_t collision_mask, bool collide_with_bodies, bool collide_with_areas) {
+	return 0;
 	ERR_FAIL_V_MSG(0, "TODO");
 }
 

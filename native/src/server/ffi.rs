@@ -12,9 +12,16 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use std::slice;
 
+// TODO ditto below
 #[repr(C)]
 pub struct PhysicsBodyState {
-	pub transform: sys::godot_transform,
+	transform: sys::godot_transform,
+	linear_velocity: sys::godot_vector3,
+	angular_velocity: sys::godot_vector3,
+	center_of_mass: sys::godot_vector3,
+	inv_mass: f32,
+	space_index: u64,
+	sleeping: bool,
 }
 
 #[repr(C)]
@@ -70,6 +77,43 @@ use super::Index;
 impl FFI {
 	pub fn _new(table: *mut UnsafeApi) -> Self {
 		Self { table }
+	}
+}
+
+impl PhysicsBodyState {
+	pub fn set_space(&mut self, index: Index) {
+		self.space_index = index.raw();
+	}
+
+	pub fn set_transform(&mut self, transform: &Transform) {
+		// SAFETY: transform is guaranteed to be valid
+		unsafe {
+			self.transform = *transform.sys();
+		}
+	}
+
+	pub fn set_linear_velocity(&mut self, velocity: Vector3) {
+		self.linear_velocity = velocity.to_sys();
+	}
+
+	pub fn set_angular_velocity(&mut self, velocity: Vector3) {
+		self.angular_velocity = velocity.to_sys();
+	}
+
+	pub fn set_sleeping(&mut self, sleeping: bool) {
+		self.sleeping = sleeping;
+	}
+
+	pub fn set_mass(&mut self, mass: f32) {
+		self.inv_mass = 1.0 / mass;
+	}
+
+	pub fn set_inv_mass(&mut self, inv_mass: f32) {
+		self.inv_mass = inv_mass;
+	}
+
+	pub fn set_center_of_mass(&mut self, center: Vector3) {
+		self.center_of_mass = center.to_sys();
 	}
 }
 

@@ -4,9 +4,9 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
-use rapier3d::na::{Dynamic, Matrix, Matrix3x1};
+use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1, Point3};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum Type {
 	Plane,
 	Ray,
@@ -50,6 +50,8 @@ pub struct Shape {
 #[derive(Debug)]
 enum ShapeError {
 	InvalidData,
+	IncompleteTriangle,
+	ConvexNotManifold,
 }
 
 impl Shape {
@@ -136,13 +138,16 @@ impl Shape {
 				let heights = e(data.get("heights").try_to_float32_array())?;
 				let heights = heights.read();
 				// TODO there are max_height and min_height, what are they for?
-				let mut map = Matrix::<_, Dynamic, Dynamic, _>::zeros(depth, width);
+				let mut map = DMatrix::zeros(width, depth);
 				for x in 0..width {
 					for z in 0..depth {
 						map[(x, z)] = heights[x * depth + z];
 					}
 				}
-				SharedShape::heightfield(map, na::Vector3::new(1.0, 1.0, 1.0))
+				SharedShape::heightfield(
+					map,
+					na::Vector3::new(depth as f32 - 1.0, 1.0, width as f32 - 1.0),
+				)
 			}
 			Type::Plane => {
 				// TODO figure out a way to implement planes
@@ -155,13 +160,68 @@ impl Shape {
 				let radius = e(data.try_to_f64())? as f32;
 				SharedShape::ball(radius)
 			}
-			_ => panic!("Handle {:?} - {:?}", self.r#type, data),
+			Type::Concave | Type::Convex => {
+				let array = e(data.try_to_vector3_array())?;
+				let array = array.read();
+				if array.len() % 3 != 0 {
+					return Err(ShapeError::IncompleteTriangle);
+				}
+				let mut verts = Vec::with_capacity(array.len());
+				for v in array.iter() {
+					verts.push(p(v.x, v.y, v.z));
+				}
+				let mut indices = Vec::with_capacity(array.len());
+				// It may be worth to perform some sort of deduplication to reduce the
+				// amount of vertices. For now, the simple, dumb way will do.
+				for i in 0..array.len() / 3 {
+					let i = i * 3;
+					indices.push([i as u32, (i + 1) as u32, (i + 2) as u32]);
+				}
+				if let Type::Concave = self.r#type {
+					SharedShape::trimesh(verts, indices)
+				} else {
+					SharedShape::convex_mesh(verts, &indices)
+						.ok_or(ShapeError::ConvexNotManifold)?
+				}
+			}
 		};
 		Ok(())
 	}
 
 	pub fn shape(&self) -> &SharedShape {
 		&self.shape
+	}
+
+	/// Do a best effort to scale a collider appropriately
+	pub fn scaled(&self, scale: Vector3) -> SharedShape {
+		let scale = vec_gd_to_na(scale);
+		// TODO figure out the exact way each collider is scaled in Godot for consistency
+		// The colliders where the scale is not certain are left empty for now
+		match self.r#type {
+			Type::Heightmap => {
+				let hf = self.shape.as_heightfield().unwrap();
+				SharedShape::heightfield(hf.heights().clone(), hf.scale().component_mul(&scale))
+			}
+			Type::Convex => {
+				let cp = self.shape.as_convex_polyhedron().unwrap();
+				let cp_points = cp.points();
+				let mut verts = Vec::with_capacity(cp_points.len());
+				for v in cp_points.iter() {
+					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
+				}
+				SharedShape::convex_hull(&verts[..]).expect("Failed to scale convex hull")
+			}
+			Type::Concave => {
+				let tm = self.shape.as_trimesh().unwrap();
+				let tm_verts = tm.vertices();
+				let mut verts = Vec::with_capacity(tm_verts.len());
+				for v in tm_verts.iter() {
+					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
+				}
+				SharedShape::trimesh(verts, tm.indices().iter().map(|v| *v).collect())
+			}
+			_ => self.shape.clone(),
+		}
 	}
 }
 

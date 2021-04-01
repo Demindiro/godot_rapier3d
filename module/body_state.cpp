@@ -1,11 +1,6 @@
 #include "body_state.h"
-
-
-PluggablePhysicsDirectBodyState::PluggablePhysicsDirectBodyState() {
-}
-
-PluggablePhysicsDirectBodyState::~PluggablePhysicsDirectBodyState() {
-}
+#include "space_state.h"
+#include "server.h"
 
 
 Vector3 PluggablePhysicsDirectBodyState::get_total_gravity() const {
@@ -19,13 +14,13 @@ float PluggablePhysicsDirectBodyState::get_total_linear_damp() const {
 };
 
 Vector3 PluggablePhysicsDirectBodyState::get_center_of_mass() const {
-	return Vector3();	
+	return this->state.center_of_mass;
 };
 Basis PluggablePhysicsDirectBodyState::get_principal_inertia_axes() const {
 	return Basis();	
 };
 float PluggablePhysicsDirectBodyState::get_inverse_mass() const {
-	return 0.0;
+	return this->state.inv_mass;
 }
 Vector3 PluggablePhysicsDirectBodyState::get_inverse_inertia() const {
 	return Vector3();
@@ -35,15 +30,17 @@ Basis PluggablePhysicsDirectBodyState::get_inverse_inertia_tensor() const {
 }
 
 void PluggablePhysicsDirectBodyState::set_linear_velocity(const Vector3 &p_velocity) {	
+	ERR_FAIL_MSG("TODO");
 }
 Vector3 PluggablePhysicsDirectBodyState::get_linear_velocity() const {
-	return Vector3();
+	return this->state.linear_velocity;
 }
 
 void PluggablePhysicsDirectBodyState::set_angular_velocity(const Vector3 &p_velocity) {	
+	ERR_FAIL_MSG("TODO");
 }
 Vector3 PluggablePhysicsDirectBodyState::get_angular_velocity() const {
-	return Vector3();
+	return this->state.angular_velocity;
 }
 
 void PluggablePhysicsDirectBodyState::set_transform(const Transform &p_transform) {
@@ -53,11 +50,21 @@ Transform PluggablePhysicsDirectBodyState::get_transform() const {
 }
 
 void PluggablePhysicsDirectBodyState::add_central_force(const Vector3 &p_force) {
+	WARN_PRINT("AAA");
 }
-void PluggablePhysicsDirectBodyState::add_force(const Vector3 &p_force, const Vector3 &p_pos) {};
-void PluggablePhysicsDirectBodyState::add_torque(const Vector3 &p_torque) {};
-void PluggablePhysicsDirectBodyState::apply_central_impulse(const Vector3 &p_j) {};
-void PluggablePhysicsDirectBodyState::apply_impulse(const Vector3 &p_pos, const Vector3 &p_j) {};
+void PluggablePhysicsDirectBodyState::add_force(const Vector3 &p_force, const Vector3 &p_pos) {
+	WARN_PRINT("BBB");
+};
+void PluggablePhysicsDirectBodyState::add_torque(const Vector3 &p_torque) {
+	WARN_PRINT("CCC");
+};
+void PluggablePhysicsDirectBodyState::apply_central_impulse(const Vector3 &p_j) {
+	WARN_PRINT("DDD");
+};
+void PluggablePhysicsDirectBodyState::apply_impulse(const Vector3 &position, const Vector3 &impulse) {
+	ERR_FAIL_COND_MSG(this->server->fn_table.body_apply_impulse == nullptr, "Not implemented");
+	(*this->server->fn_table.body_apply_impulse)(this->body, &position, &impulse);
+};
 void PluggablePhysicsDirectBodyState::apply_torque_impulse(const Vector3 &p_j) {};
 
 void PluggablePhysicsDirectBodyState::set_sleep_state(bool p_enable) {};
@@ -102,12 +109,13 @@ Vector3 PluggablePhysicsDirectBodyState::get_contact_collider_velocity_at_positi
 };
 
 real_t PluggablePhysicsDirectBodyState::get_step() const {
-	return 0.0;	
+	return this->delta;
 };
 void PluggablePhysicsDirectBodyState::integrate_forces() {
-	
+	WARN_PRINT("EEE");
 };
 
 PhysicsDirectSpaceState *PluggablePhysicsDirectBodyState::get_space_state() {
-	return nullptr;
+	this->space_state_singleton->space = this->state.space;
+	return this->space_state_singleton;
 };

@@ -151,9 +151,10 @@ macro_rules! map_index {
 
 		fn $fn_remove(self) -> Result<$struct, IndexError> {
 			if let Index::$variant(index) = self {
-				let mut w = $array
-					.write()
-					.expect(&format!("Failed to write-lock {} array", stringify!($variant)));
+				let mut w = $array.write().expect(&format!(
+					"Failed to write-lock {} array",
+					stringify!($variant)
+				));
 				if let Some(element) = w.remove(index as usize) {
 					Ok(element)
 				} else {
@@ -302,7 +303,7 @@ macro_rules! map_or_err {
 }
 
 fn init(ffi: &mut ffi::FFI) {
-	ffi.init(print_init);
+	ffi.init(server_init);
 	ffi.flush_queries(flush_queries);
 	ffi.step(step);
 	ffi.sync(sync);
@@ -325,9 +326,7 @@ unsafe fn conv_transform(transform: sys::godot_transform) -> Isometry<f32> {
 
 gdphysics_init!(init);
 
-fn print_init() {
-	println!("RUST MODULES LIVE! *stomp stomp*");
-}
+fn server_init() {}
 
 fn step(delta: f32) {
 	crate::step_all_spaces(delta);

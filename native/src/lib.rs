@@ -1,3 +1,4 @@
+#![feature(destructuring_assignment)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
@@ -19,6 +20,18 @@ use rapier3d::geometry::{BroadPhase, Collider, ColliderHandle, ColliderSet, Narr
 use rapier3d::pipeline::{PhysicsPipeline, QueryPipeline};
 use std::collections::HashMap;
 use std::sync::RwLock;
+
+extern "C" {
+	fn feenableexcept(flags: i32);
+}
+
+/// Call this if you are getting NaN errors *somewhere*
+#[allow(dead_code)]
+fn enable_sigfpe() {
+	unsafe {
+		feenableexcept(9);
+	}
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SpaceHandle(usize);
@@ -44,6 +57,7 @@ struct World3D {
 	physics_hooks: (),
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
+	index: Option<Index>,
 }
 
 #[derive(NativeClass)]
@@ -122,6 +136,16 @@ impl SpaceHandle {
 		let spaces = get_spaces!();
 		let space = spaces.get(self.0).and_then(Option::as_ref).ok_or(())?;
 		Ok(f(space))
+	}
+
+	/// Get the server index of this space
+	fn index(&self) -> Result<Option<server::Index>, ()> {
+		self.read(|space| space.index)
+	}
+
+	/// Set the server index of this space
+	fn set_index(&self, index: Option<server::Index>) -> Result<(), ()> {
+		self.modify(|space| space.index = index)
 	}
 }
 
@@ -234,6 +258,7 @@ fn create_world() -> World3D {
 		physics_hooks: (),
 		event_handler: (),
 		query_pipeline_out_of_date: false,
+		index: None,
 	}
 }
 
@@ -257,7 +282,7 @@ fn get_transform(space: SpaceHandle, handle: RigidBodyHandle) -> Result<Transfor
 	Ok(transform)
 }
 
-fn init(handle: InitHandle) {
+pub fn init(handle: InitHandle) {
 	handle.add_class::<Rapier3D>();
 	handle.add_class::<body::RigidBody>();
 	handle.add_class::<body::StaticBody>();

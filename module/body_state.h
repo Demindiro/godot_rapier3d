@@ -3,6 +3,7 @@
 
 #include "servers/physics_server.h"
 #include "typedef.h"
+#include "index.h"
 
 
 #ifdef __cplusplus
@@ -11,6 +12,12 @@ extern "C" {
 
 struct physics_body_state {
 	godot_transform transform;
+	godot_vector3 linear_velocity;
+	godot_vector3 angular_velocity;
+	godot_vector3 center_of_mass;
+	real_t inv_mass;
+	index_t space;
+	bool sleeping;
 };
 
 #ifdef __cplusplus
@@ -21,15 +28,22 @@ struct physics_body_state {
 #ifdef __cplusplus
 
 class PluggablePhysicsServer;
+class PluggablePhysicsDirectSpaceState;
 
 class PluggablePhysicsDirectBodyState : public PhysicsDirectBodyState {
 	GDCLASS(PluggablePhysicsDirectBodyState, PhysicsDirectBodyState);
 
 	friend class PluggablePhysicsServer;
-	PluggablePhysicsDirectBodyState();
-	~PluggablePhysicsDirectBodyState();
+	_FORCE_INLINE_ PluggablePhysicsDirectBodyState(PluggablePhysicsServer *p_server) {
+		this->server = p_server;
+	}
+	_FORCE_INLINE_ ~PluggablePhysicsDirectBodyState() {}
 
 	struct physics_body_state state;
+	index_t body;
+	PluggablePhysicsServer *server;
+	PluggablePhysicsDirectSpaceState *space_state_singleton;
+	real_t delta;
 
 public:
 	virtual Vector3 get_total_gravity() const;

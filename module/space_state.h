@@ -41,6 +41,7 @@ class PluggablePhysicsDirectSpaceState : public PhysicsDirectSpaceState {
 	GDCLASS(PluggablePhysicsDirectSpaceState, PhysicsDirectSpaceState);
 
 	friend class PluggablePhysicsServer;
+	friend class PluggablePhysicsDirectBodyState;
 
 	PluggablePhysicsServer *server;
 	index_t space;
