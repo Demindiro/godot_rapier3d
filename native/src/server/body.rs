@@ -261,7 +261,7 @@ fn create(r#type: i32, sleep: bool) -> Option<Index> {
 	}
 }
 
-fn add_force(body: Index, position: Vector3, force: Vector3) {
+fn add_force(body: Index, force: Vector3, position: Vector3) {
 	map_or_err!(body, map_body, |body, _| {
 		if let Instance::Attached((body, _), space) = &body.body {
 			space
