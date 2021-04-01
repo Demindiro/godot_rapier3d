@@ -25,6 +25,7 @@ lazy_static::lazy_static! {
 	static ref BODY_INDICES: RwLock<SparseVec<Body>> = RwLock::new(SparseVec::new());
 	static ref JOINT_INDICES: RwLock<SparseVec<Joint>> = RwLock::new(SparseVec::new());
 	static ref SHAPE_INDICES: RwLock<SparseVec<Shape>> = RwLock::new(SparseVec::new());
+	static ref ACTIVE: RwLock<bool> = RwLock::new(true);
 }
 
 struct SparseVec<T> {
@@ -304,6 +305,7 @@ macro_rules! map_or_err {
 }
 
 fn init(ffi: &mut ffi::FFI) {
+	ffi.set_active(set_active);
 	ffi.init(server_init);
 	ffi.flush_queries(flush_queries);
 	ffi.step(step);
@@ -330,7 +332,9 @@ gdphysics_init!(init);
 fn server_init() {}
 
 fn step(delta: f32) {
-	crate::step_all_spaces(delta);
+	if *ACTIVE.read().expect("Failed to check ACTIVE") {
+		crate::step_all_spaces(delta);
+	}
 }
 
 fn sync() {}
@@ -344,4 +348,8 @@ fn free(index: Index) {
 fn get_process_info(info: i32) -> i32 {
 	godot_error!("TODO {}", info);
 	0
+}
+
+fn set_active(active: bool) {
+	*ACTIVE.write().expect("Failed to modify ACTIVE") = active;
 }
