@@ -1,5 +1,5 @@
-use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote, IdentFragment, ToTokens, TokenStreamExt};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -106,7 +106,6 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 		let method = format_ident!("{}", method);
 		let ret = map_type(ret_type);
 		let ret_safe = map_type_safe(ret_type);
-		let wrap_method = format_ident!("wrap_{}", method);
 		let default_ret = default_value_for_type(ret_type);
 		let (ret_wrap_pre, ret_wrap_post) = if ret_type == "maybe_index_t" {
 			(quote!(if let Some(r) = ), quote!({ r.raw() } else { 0 }))
@@ -198,7 +197,7 @@ fn map_type_safe(t: &str) -> TokenStream {
 	} else {
 		(t, false)
 	};
-	let mut cons = t != "godot_object";
+	let cons = t != "godot_object";
 	let t = match t {
 		"index_t" | "index_mut_t" => quote!(Index),
 		"maybe_index_t" => quote!(Option<Index>),
@@ -223,34 +222,6 @@ fn map_type_safe(t: &str) -> TokenStream {
 }
 
 fn default_value_for_type(t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") {
-		(&t[..t.len() - 2], true)
-	} else {
-		(t, false)
-	};
-	match t {
-		"index_t" | "maybe_index_t" | "index_mut_t" => quote!(0),
-		"void" => quote!(()),
-		"uint32_t" => quote!(0),
-		"int" => quote!(0),
-		"bool" => quote!(false),
-		"float" => quote!(0.0),
-		"physics_body_state_mut_t" => quote!(ptr::null()),
-		"physics_space_state_mut_t" => quote!(ptr::null()),
-		"physics_area_monitor_event_mut_t" => quote!(ptr::null()),
-		"godot_variant" => quote!(Variant::new().to_sys()),
-		"godot_transform" => quote!(*Transform {
-			basis: Basis::identity(),
-			origin: Vector3::zero()
-		}
-		.sys()),
-		"godot_vector3" => quote!(Vector3::zero().to_sys()),
-		"godot_pool_vector3_array" => quote!(*TypedArray::<Vector3>::new().sys()),
-		_ => panic!("Unhandled type: {}", t),
-	}
-}
-
-fn convert_type_to_sys(name: &TokenStream, t: &str) -> TokenStream {
 	let (t, _) = if t.ends_with(" *") {
 		(&t[..t.len() - 2], true)
 	} else {
@@ -317,10 +288,10 @@ fn convert_type_from_sys(name: &TokenStream, t: &str) -> (TokenStream, bool) {
 }
 
 fn get_type_from_sys(t: &str) -> TokenStream {
-	let (t, ptr) = if t.ends_with(" *") {
-		(&t[..t.len() - 2], true)
+	let t = if t.ends_with(" *") {
+		&t[..t.len() - 2]
 	} else {
-		(t, false)
+		t
 	};
 	let t = match t {
 		"index_t" => quote!(Index),

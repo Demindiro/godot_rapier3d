@@ -3,6 +3,8 @@
 #![allow(non_snake_case)]
 #![allow(improper_ctypes)]
 #![allow(unused_parens)]
+#![allow(dead_code)]
+#![allow(unused)] // FIXME this is temporary, one of the functions is of type *const ()
 
 //include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 include!(concat!(env!("OUT_DIR"), "/ffi.rs"));

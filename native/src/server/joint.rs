@@ -1,10 +1,8 @@
 use super::*;
 use crate::vec_gd_to_na;
-use core::mem;
 use gdnative::core_types::*;
-use gdnative::sys;
-use rapier3d::dynamics::{self, JointHandle, JointParams, RevoluteJoint, SpringModel};
-use rapier3d::math::{Point, Vector};
+use rapier3d::dynamics::{JointHandle, JointParams, RevoluteJoint, SpringModel};
+use rapier3d::math::Point;
 use rapier3d::na::Unit;
 
 pub struct Joint {
@@ -13,7 +11,9 @@ pub struct Joint {
 
 struct LooseJoint {
 	params: JointParams,
+	#[allow(dead_code)]
 	body_a: u32,
+	#[allow(dead_code)]
 	body_b: u32,
 }
 

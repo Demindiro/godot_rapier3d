@@ -67,11 +67,14 @@ fn intersect_ray(
 }
 
 fn set_active(space: Index, active: bool) {
-	map_or_err!(space, map_space, |space, _| space.modify(|space| space.enabled = active).expect("Invalid space"));
+	map_or_err!(space, map_space, |space, _| space
+		.modify(|space| space.enabled = active)
+		.expect("Invalid space"));
 }
 
 fn is_active(space: Index) -> bool {
-	let result = space.map_space(|space, _| space.read(|space| space.enabled).expect("Invalid space"));
+	let result =
+		space.map_space(|space, _| space.read(|space| space.enabled).expect("Invalid space"));
 	if let Ok(active) = result {
 		active
 	} else {

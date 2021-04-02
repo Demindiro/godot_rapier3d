@@ -69,10 +69,10 @@ singletons=[  ]
 
 [physics]
 
+3d/physics_engine="Custom"
 3d/active_soft_world=false
 3d/custom_library_path="res://addons/rapier3d/rapier3d.gdnlib"
 common/enable_object_picking=false
-3d/physics_engine="Custom"
 
 [rendering]
 

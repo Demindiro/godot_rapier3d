@@ -1,7 +1,5 @@
 use super::*;
-use core::mem;
 use gdnative::core_types::*;
-use gdnative::sys;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
 use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1, Point3};

@@ -1,11 +1,10 @@
 use super::*;
 use gdnative::core_types::*;
-use gdnative::sys;
 use rapier3d::dynamics::{
 	ActivationStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
 };
 use rapier3d::geometry::{ColliderBuilder, ColliderHandle};
-use rapier3d::math::{Isometry, Rotation, Translation, Vector};
+use rapier3d::math::Isometry;
 use rapier3d::na;
 use std::mem;
 
@@ -290,24 +289,22 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 		if let Index::Body(index_b) = body_b {
 			if !body_a.exclusions.contains(&index_b) {
 				body_a.exclusions.push(index_b);
-				if let Instance::Attached((rb, _), space) = &body_a.body {
+				if let Instance::Attached(_, space) = &body_a.body {
 					space
 						.modify(|space| {
 							space.body_exclusions.add_exclusion(index_a, index_b);
 						})
 						.expect("Invalid space");
 				}
-				godot_warn!("Success A -> B");
 			} else {
 				godot_error!("Body A already excludes B");
 			}
 		}
 	});
-	map_or_err!(body_b, map_body_mut, |body_b, index_b| {
+	map_or_err!(body_b, map_body_mut, |body_b, _| {
 		if let Index::Body(index_a) = body_a {
 			if !body_b.exclusions.contains(&index_a) {
 				body_b.exclusions.push(index_a);
-				godot_warn!("Success B -> A");
 			} else {
 				godot_error!("Body B already excludes A");
 			}
@@ -368,7 +365,6 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 				space
 					.read(|s| {
 						let body = s.bodies.get(*body).expect("Invalid body handle");
-						let transform = isometry_to_transform(body.position());
 						state.set_transform(&isometry_to_transform(body.position()));
 						state.set_space(
 							space
@@ -420,8 +416,8 @@ fn set_param(body: Index, param: i32, value: f32) {
 		}
 		Param::LinearDamp(damp) => body.linear_damping = damp,
 		Param::AngularDamp(damp) => body.angular_damping = damp,
-		Param::Bounce(bounce) => godot_error!("TODO bounce"),
-		Param::Friction(friction) => godot_error!("TODO friction"),
+		Param::Bounce(_bounce) => godot_error!("TODO bounce"),
+		Param::Friction(_friction) => godot_error!("TODO friction"),
 		Param::GravityScale(scale) => body.set_gravity_scale(scale, true),
 	};
 	map_or_err!(body, map_body_mut, |body, _| {

@@ -7,17 +7,10 @@ mod space;
 
 use crate::*;
 pub use body::Body;
-use core::convert::TryInto;
-use core::fmt;
-use core::mem;
 use core::num::NonZeroU32;
-use core::ops::DerefMut;
-use gdnative::sys;
 use joint::Joint;
-use rapier3d::math::{Isometry, Rotation, Translation, Vector};
 use rapier3d::na;
 use shape::Shape;
-use std::io;
 use std::sync::RwLock;
 
 lazy_static::lazy_static! {
@@ -44,14 +37,6 @@ pub enum Index {
 	Body(u32),
 	Joint(u32),
 	Shape(u32),
-}
-
-/// Used primarily for cleanup, as there is only one generic `free()` function
-enum Type {
-	Space(SpaceHandle),
-	Body(Body),
-	Joint(Joint),
-	Shape(Shape),
 }
 
 #[derive(Debug)]
@@ -103,6 +88,7 @@ impl<T> SparseVec<T> {
 
 macro_rules! map_index {
 	($fn:ident, $fn_mut:ident, $fn_add:ident, $fn_remove:ident, $array:ident, $variant:ident, $struct:ty) => {
+		#[allow(dead_code)]
 		fn $fn<F, R>(self, f: F) -> Result<R, IndexError>
 		where
 			F: FnOnce(&$struct, u32) -> R,
@@ -122,6 +108,7 @@ macro_rules! map_index {
 			}
 		}
 
+		#[allow(dead_code)]
 		fn $fn_mut<F, R>(self, f: F) -> Result<R, IndexError>
 		where
 			F: FnOnce(&mut $struct, u32) -> R,
@@ -141,6 +128,7 @@ macro_rules! map_index {
 			}
 		}
 
+		#[allow(dead_code)]
 		fn $fn_add(element: $struct) -> Index {
 			let mut w = $array.write().expect(&format!(
 				"Failed to write-lock {} array",
@@ -150,6 +138,7 @@ macro_rules! map_index {
 			Self::$variant(index as u32)
 		}
 
+		#[allow(dead_code)]
 		fn $fn_remove(self) -> Result<$struct, IndexError> {
 			if let Index::$variant(index) = self {
 				let mut w = $array.write().expect(&format!(
@@ -316,15 +305,6 @@ fn init(ffi: &mut ffi::FFI) {
 	joint::init(ffi);
 	space::init(ffi);
 	shape::init(ffi);
-}
-
-/// SAFETY: transform must be a valid pointer and must not be freed by the caller
-unsafe fn conv_transform(transform: sys::godot_transform) -> Isometry<f32> {
-	use gdnative::{core_types::Transform, sys};
-	// SAFETY: gdnative_sys::godot_transform is the exact same as sys::godot_transform
-	let transform: sys::godot_transform = mem::transmute(transform);
-	let transform = Transform::from_sys(transform);
-	transform_to_isometry(transform)
 }
 
 gdphysics_init!(init);

@@ -1,7 +1,4 @@
-[gd_scene load_steps=5 format=2]
-
-[ext_resource path="res://addons/rapier3d/static_body.gdns" type="Script" id=1]
-[ext_resource path="res://addons/rapier3d/box.gdns" type="Script" id=2]
+[gd_scene load_steps=3 format=2]
 
 [sub_resource type="CubeMesh" id=1]
 size = Vector3( 100, 1, 100 )
@@ -11,21 +8,11 @@ extents = Vector3( 50, 0.5, 50 )
 
 [node name="Environment" type="Node"]
 
-[node name="Floor Rapier3D" type="Spatial" parent="."]
-script = ExtResource( 1 )
-__meta__ = {
-"_edit_group_": true
-}
+[node name="Floor" type="StaticBody" parent="."]
 
-[node name="Shape" type="Spatial" parent="Floor Rapier3D"]
-script = ExtResource( 2 )
-extents = Vector3( 50, 0.5, 50 )
-
-[node name="MeshInstance" type="MeshInstance" parent="Floor Rapier3D"]
+[node name="MeshInstance" type="MeshInstance" parent="Floor"]
 mesh = SubResource( 1 )
 material/0 = null
 
-[node name="Floor Godot" type="StaticBody" parent="."]
-
-[node name="Shape" type="CollisionShape" parent="Floor Godot"]
+[node name="CollisionShape" type="CollisionShape" parent="Floor"]
 shape = SubResource( 2 )

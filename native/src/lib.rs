@@ -1,9 +1,5 @@
 #![feature(destructuring_assignment)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
 
-mod body;
-mod collider;
 mod server;
 mod util;
 
@@ -16,9 +12,7 @@ use lazy_static::lazy_static;
 use rapier3d::dynamics::{
 	IntegrationParameters, JointSet, RigidBody, RigidBodyHandle, RigidBodySet,
 };
-use rapier3d::geometry::{
-	BroadPhase, Collider, ColliderHandle, ColliderSet, NarrowPhase, SolverFlags,
-};
+use rapier3d::geometry::{BroadPhase, Collider, ColliderSet, NarrowPhase, SolverFlags};
 use rapier3d::pipeline::{
 	ContactModificationContext, PairFilterContext, PhysicsHooks, PhysicsHooksFlags,
 	PhysicsPipeline, QueryPipeline,
@@ -68,32 +62,9 @@ struct World3D {
 
 struct BodyExclusionHooks {
 	// Reasoning for using Vec and Box instead of HashMap & HashSet:
-	// * Arena is likely densely packed -> not many "holes" in the Vec.
+	// * SparseVec is likely densely packed -> not many "holes" in the Vec.
 	// * Amount of body exclusions is likely small -> Vec is compact and maybe faster.
 	exclusions: Vec<Vec<u32>>,
-}
-
-#[derive(NativeClass)]
-#[inherit(Node)]
-struct Rapier3D;
-
-#[methods]
-impl Rapier3D {
-	fn new(_owner: TRef<Node>) -> Self {
-		Self
-	}
-
-	#[export]
-	fn _physics_process(&mut self, owner: TRef<Node>, delta: f32) {
-		let _ = (owner, delta);
-		// TODO remove the autoload dummy
-		//self.step(owner, delta);
-	}
-
-	#[export]
-	fn step(&mut self, _owner: TRef<Node>, delta: f32) {
-		step_all_spaces(delta);
-	}
 }
 
 impl World3D {
@@ -182,6 +153,8 @@ impl BodyExclusionHooks {
 		}
 	}
 
+	// TODO implement body_remove_exception and remove the allow
+	#[allow(dead_code)]
 	fn remove_exclusion(&mut self, index_a: u32, index_b: u32) {
 		let (a, b) = (index_a, index_b);
 		let (a, b) = if a < b { (a, b) } else { (b, a) };
@@ -222,53 +195,15 @@ impl PhysicsHooks for BodyExclusionHooks {
 	fn modify_solver_contacts(&self, _: &mut ContactModificationContext) {}
 }
 
-macro_rules! get_world_to_space_mut {
-	() => {
-		WORLD_TO_SPACE
-			.write()
-			.expect("Failed to write WORLD_TO_SPACE")
-	};
-}
-
 fn step_all_spaces(delta: f32) {
 	let mut worlds = SPACES.write().expect("Failed to write to WORLDS");
-	for world in worlds.iter_mut().filter_map(Option::as_mut).filter(|w| w.enabled) {
+	for world in worlds
+		.iter_mut()
+		.filter_map(Option::as_mut)
+		.filter(|w| w.enabled)
+	{
 		world.step(delta);
 	}
-}
-
-fn add_rigid_body(world: Ref<World>, body: RigidBody) -> (RigidBodyHandle, SpaceHandle) {
-	let &mut handle = get_world_to_space_mut!()
-		.entry(world)
-		.or_insert_with(create_space);
-	(
-		get_spaces_mut!()[handle.0]
-			.as_mut()
-			.unwrap()
-			.bodies
-			.insert(body),
-		handle,
-	)
-}
-
-fn add_collider(
-	space: SpaceHandle,
-	body: RigidBodyHandle,
-	collider: Collider,
-) -> Result<ColliderHandle, ()> {
-	let mut spaces = get_spaces_mut!();
-	let space = spaces.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
-	Ok(space.colliders.insert(collider, body, &mut space.bodies))
-}
-
-fn remove_rigid_body(space: SpaceHandle, body: RigidBodyHandle) -> Result<(), ()> {
-	let mut worlds = get_spaces_mut!();
-	let world = worlds.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
-	world
-		.bodies
-		.remove(body, &mut world.colliders, &mut world.joints)
-		.map(|_| ())
-		.ok_or(())
 }
 
 fn modify_rigid_body<F>(space: SpaceHandle, body: RigidBodyHandle, f: F) -> Result<(), ()>
@@ -279,16 +214,6 @@ where
 	let space = spaces.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
 	f(space.bodies.get_mut(body).ok_or(())?);
 	Ok(())
-}
-
-fn remove_collider(space: SpaceHandle, collider: ColliderHandle) -> Result<(), ()> {
-	let mut spaces = get_spaces_mut!();
-	let space = spaces.get_mut(space.0).and_then(Option::as_mut).ok_or(())?;
-	space
-		.colliders
-		.remove(collider, &mut space.bodies, true)
-		.map(|_| ())
-		.ok_or(())
 }
 
 fn create_space() -> SpaceHandle {
@@ -335,32 +260,7 @@ fn create_world() -> World3D {
 	}
 }
 
-fn get_transform(space: SpaceHandle, handle: RigidBodyHandle) -> Result<Transform, ()> {
-	let spaces = get_spaces!();
-	let space = spaces.get(space.0).and_then(Option::as_ref).ok_or(())?;
-	let isometry = space.bodies.get(handle).map(|b| b.position()).ok_or(())?;
-	let rotation: rapier3d::na::Rotation3<_> = isometry.rotation.into();
-	let mat = rotation.matrix();
-	let basis = Basis {
-		elements: [
-			Vector3::new(mat.m11, mat.m12, mat.m13),
-			Vector3::new(mat.m21, mat.m22, mat.m23),
-			Vector3::new(mat.m31, mat.m32, mat.m33),
-		],
-	};
-	let transform = Transform {
-		basis,
-		origin: vec_na_to_gd(isometry.translation.vector),
-	};
-	Ok(transform)
-}
-
-pub fn init(handle: InitHandle) {
-	handle.add_class::<Rapier3D>();
-	handle.add_class::<body::RigidBody>();
-	handle.add_class::<body::StaticBody>();
-	handle.add_class::<collider::Box>();
-}
+pub fn init(_handle: InitHandle) {}
 
 godot_gdnative_init!(_ as gd_rapier3d_gdnative_init);
 godot_nativescript_init!(init as gd_rapier3d_nativescript_init);
