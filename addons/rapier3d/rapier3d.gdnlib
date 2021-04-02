@@ -7,7 +7,7 @@ reloadable=false
 
 [entry]
 
-X11.64="res://addons/rapier3d/lib/libgodot_rapier3d.so"
+X11.64="res://addons/rapier3d/lib/librapier3d.so"
 
 [dependencies]
 

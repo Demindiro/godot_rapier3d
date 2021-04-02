@@ -18,34 +18,10 @@ _global_script_classes=[ {
 "class": "BatchedMeshManager",
 "language": "NativeScript",
 "path": "res://addons/3d_batcher/batched_mesh_manager.gdns"
-}, {
-"base": "Node",
-"class": "Rapier3D",
-"language": "NativeScript",
-"path": "res://addons/rapier3d/rapier3d.gdns"
-}, {
-"base": "Spatial",
-"class": "Rapier3D_Box",
-"language": "NativeScript",
-"path": "res://addons/rapier3d/box.gdns"
-}, {
-"base": "Spatial",
-"class": "Rapier3D_RigidBody",
-"language": "NativeScript",
-"path": "res://addons/rapier3d/rigid_body.gdns"
-}, {
-"base": "Spatial",
-"class": "Rapier3D_StaticBody",
-"language": "NativeScript",
-"path": "res://addons/rapier3d/static_body.gdns"
 } ]
 _global_script_class_icons={
 "BatchedMeshInstance": "",
-"BatchedMeshManager": "",
-"Rapier3D": "",
-"Rapier3D_Box": "",
-"Rapier3D_RigidBody": "",
-"Rapier3D_StaticBody": ""
+"BatchedMeshManager": ""
 }
 
 [application]

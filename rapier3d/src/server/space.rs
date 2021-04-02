@@ -24,11 +24,7 @@ fn intersect_ray(
 	result: &mut ffi::PhysicsRayResult,
 ) -> bool {
 	// TODO account for excluded colliders
-	// There are two ways to approach this
-	// - Make a separate ColliderSet without the excluded colliders (very likely very slow)
-	// - Use `intersections_with_ray`
-	// It probably makes sense to use `cast_ray_and_get_normal` if there are no excluded colliders,
-	// it is likely at least as fast as `intersections_with_ray`.
+	// Rapier 0.7 added a `filter` parameter which can be used for the exclusion list.
 	let mut collided = false;
 	map_or_err!(space, map_space, |space, _| space.modify(|space| {
 		space.update_query_pipeline();
@@ -44,6 +40,7 @@ fn intersect_ray(
 			// FIXME document the fact that bitmasks are limited to 16 bits (which honestly should be plenty
 			// for all games, but people may still be using the upper 4 bits of the 20(?) available)
 			InteractionGroups::new(u16::MAX, info.collision_mask() as u16),
+			None,
 		);
 		if let Some((collider, intersection)) = intersection {
 			//let point = dir.mul_add(intersection.toi, from); // Faster & more accurate

@@ -3,6 +3,7 @@ bin/
 target/
 lib/
 logs/
+rapier3d/api.json
 module/api.json
 module/api.gen.h
 module/server.gen.cpp

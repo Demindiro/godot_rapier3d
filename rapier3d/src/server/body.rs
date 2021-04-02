@@ -221,7 +221,7 @@ impl Body {
 				let shape_scale = vec_na_to_gd(shape_scale);
 				let result = Index::read_shape(shape.index, |shape| {
 					let mut collider = ColliderBuilder::new(shape.scaled(shape_scale))
-						.position(transform)
+						.position_wrt_parent(transform)
 						.build();
 					Body::set_shape_userdata(&mut collider, index, i as u32);
 					colliders.push(Some(collider));

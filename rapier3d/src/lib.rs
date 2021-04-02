@@ -10,7 +10,7 @@ use gdnative::api::World;
 use gdnative::prelude::*;
 use lazy_static::lazy_static;
 use rapier3d::dynamics::{
-	IntegrationParameters, JointSet, RigidBody, RigidBodyHandle, RigidBodySet,
+	CCDSolver, IntegrationParameters, JointSet, RigidBody, RigidBodyHandle, RigidBodySet,
 };
 use rapier3d::geometry::{BroadPhase, Collider, ColliderSet, NarrowPhase, SolverFlags};
 use rapier3d::pipeline::{
@@ -53,6 +53,7 @@ struct World3D {
 	bodies: RigidBodySet,
 	colliders: ColliderSet,
 	joints: JointSet,
+	ccd_solver: CCDSolver,
 	body_exclusions: BodyExclusionHooks,
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
@@ -78,6 +79,7 @@ impl World3D {
 			&mut self.bodies,
 			&mut self.colliders,
 			&mut self.joints,
+			&mut self.ccd_solver,
 			&self.body_exclusions,
 			&self.event_handler,
 		);
@@ -252,6 +254,7 @@ fn create_world() -> World3D {
 		bodies: RigidBodySet::new(),
 		colliders: ColliderSet::new(),
 		joints: JointSet::new(),
+		ccd_solver: CCDSolver::new(),
 		body_exclusions: BodyExclusionHooks::new(),
 		event_handler: (),
 		query_pipeline_out_of_date: false,
@@ -260,8 +263,6 @@ fn create_world() -> World3D {
 	}
 }
 
-pub fn init(_handle: InitHandle) {}
-
-godot_gdnative_init!(_ as gd_rapier3d_gdnative_init);
-godot_nativescript_init!(init as gd_rapier3d_nativescript_init);
-godot_gdnative_terminate!(_ as gd_rapier3d_gdnative_terminate);
+/// Bogus method just so not everything gets optimized away
+/// Use this with `godot_nativescript_init`
+pub fn init(_: InitHandle) {}
