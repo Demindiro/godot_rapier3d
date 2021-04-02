@@ -1,6 +1,7 @@
 use super::*;
-use crate::vec_gd_to_na;
+use crate::util::*;
 use gdnative::core_types::*;
+use gdnative::godot_error;
 use rapier3d::dynamics::{JointHandle, JointParams, RevoluteJoint, SpringModel};
 use rapier3d::math::Point;
 use rapier3d::na::Unit;
@@ -51,16 +52,10 @@ impl Joint {
 					if let Some((body_b, space_b)) = body_b.as_attached() {
 						if space_a == space_b {
 							return Some((
-								space_a
-									.modify(|space| {
-										space.joints.insert(
-											&mut space.bodies,
-											body_a,
-											body_b,
-											joint,
-										)
-									})
-									.expect("Invalid space"),
+								Index::modify_space(space_a, |space| {
+									space.add_joint(params, body_a, body_b)
+								})
+								.expect("Invalid space"),
 								space_a,
 							));
 						} else {
@@ -90,8 +85,7 @@ impl Joint {
 	pub fn free(mut self) {
 		match &mut self.joint {
 			Instance::Attached(jh, space) => {
-				space
-					.modify(|space| space.joints.remove(*jh, &mut space.bodies, true))
+				Index::modify_space(*space, |space| space.remove_joint(*jh))
 					.expect("Invalid space");
 			}
 			Instance::Loose(_) => {}
@@ -175,7 +169,9 @@ fn create_hinge(
 	joint.basis1 = basis_a;
 	joint.basis2 = basis_b;
 
-	Some(Index::add_joint(Joint::new(joint, body_a, body_b)))
+	Some(Index::Joint(Index::add_joint(Joint::new(
+		joint, body_a, body_b,
+	))))
 }
 
 fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
@@ -205,17 +201,16 @@ fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
 	map_or_err!(joint, map_joint_mut, |joint, _| {
 		match &mut joint.joint {
 			Instance::Attached(jh, space) => {
-				space
-					.modify(|space| {
-						apply(
-							&mut space
-								.joints
-								.get_mut(*jh)
-								.expect("Invalid joint handle")
-								.params,
-						);
-					})
-					.expect("Invalid space");
+				Index::modify_space(*space, |space| {
+					apply(
+						&mut space
+							.joints_mut()
+							.get_mut(*jh)
+							.expect("Invalid joint handle")
+							.params,
+					);
+				})
+				.expect("Invalid space");
 			}
 			Instance::Loose(j) => apply(&mut j.params),
 		}
@@ -255,17 +250,16 @@ fn set_hinge_param(joint: Index, param: i32, value: f32) {
 	map_or_err!(joint, map_joint_mut, |joint, _| {
 		match &mut joint.joint {
 			Instance::Attached(jh, space) => {
-				space
-					.modify(|space| {
-						apply(
-							&mut space
-								.joints
-								.get_mut(*jh)
-								.expect("Invalid joint handle")
-								.params,
-						);
-					})
-					.expect("Invalid space");
+				Index::modify_space(*space, |space| {
+					apply(
+						&mut space
+							.joints_mut()
+							.get_mut(*jh)
+							.expect("Invalid joint handle")
+							.params,
+					);
+				})
+				.expect("Invalid space");
 			}
 			Instance::Loose(j) => apply(&mut j.params),
 		}

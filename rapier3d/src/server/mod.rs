@@ -5,16 +5,18 @@ mod joint;
 mod shape;
 mod space;
 
+use crate::space::Space;
 use crate::*;
 pub use body::Body;
 use core::num::NonZeroU32;
+use gdnative::godot_error;
 use joint::Joint;
 use rapier3d::na;
 use shape::Shape;
 use std::sync::RwLock;
 
 lazy_static::lazy_static! {
-	static ref SPACE_INDICES: RwLock<SparseVec<SpaceHandle>> = RwLock::new(SparseVec::new());
+	static ref SPACE_INDICES: RwLock<SparseVec<Space>> = RwLock::new(SparseVec::new());
 	static ref BODY_INDICES: RwLock<SparseVec<Body>> = RwLock::new(SparseVec::new());
 	static ref JOINT_INDICES: RwLock<SparseVec<Joint>> = RwLock::new(SparseVec::new());
 	static ref SHAPE_INDICES: RwLock<SparseVec<Shape>> = RwLock::new(SparseVec::new());
@@ -27,7 +29,7 @@ struct SparseVec<T> {
 }
 
 enum Instance<A, L> {
-	Attached(A, SpaceHandle),
+	Attached(A, u32),
 	Loose(L),
 }
 
@@ -84,25 +86,26 @@ impl<T> SparseVec<T> {
 		}
 		None
 	}
+
+	#[allow(dead_code)]
+	fn iter(&self) -> impl Iterator<Item = &T> {
+		self.elements.iter().filter_map(Option::as_ref)
+	}
+
+	fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+		self.elements.iter_mut().filter_map(Option::as_mut)
+	}
 }
 
 macro_rules! map_index {
-	($fn:ident, $fn_mut:ident, $fn_add:ident, $fn_remove:ident, $array:ident, $variant:ident, $struct:ty) => {
+	($fn:ident, $fn_mut:ident, $fn_read:ident, $fn_modify:ident, $fn_add:ident, $fn_remove:ident, $array:ident, $variant:ident) => {
 		#[allow(dead_code)]
 		fn $fn<F, R>(self, f: F) -> Result<R, IndexError>
 		where
-			F: FnOnce(&$struct, u32) -> R,
+			F: FnOnce(&$variant, u32) -> R,
 		{
-			const NAME: &str = stringify!($variant);
 			if let Index::$variant(index) = self {
-				let w = $array
-					.read()
-					.expect(&format!("Failed to read-lock {} array", NAME));
-				if let Some(e) = w.get(index as usize) {
-					Ok(f(e, index))
-				} else {
-					Err(IndexError::NoElement)
-				}
+				Index::$fn_read(index, |e| f(e, index))
 			} else {
 				Err(IndexError::WrongType)
 			}
@@ -111,35 +114,56 @@ macro_rules! map_index {
 		#[allow(dead_code)]
 		fn $fn_mut<F, R>(self, f: F) -> Result<R, IndexError>
 		where
-			F: FnOnce(&mut $struct, u32) -> R,
+			F: FnOnce(&mut $variant, u32) -> R,
 		{
-			const NAME: &str = stringify!($variant);
 			if let Index::$variant(index) = self {
-				let mut w = $array
-					.write()
-					.expect(&format!("Failed to write-lock {} array", NAME));
-				if let Some(e) = w.get_mut(index as usize) {
-					Ok(f(e, index))
-				} else {
-					Err(IndexError::NoElement)
-				}
+				Index::$fn_modify(index, |e| f(e, index))
 			} else {
 				Err(IndexError::WrongType)
 			}
 		}
 
-		#[allow(dead_code)]
-		fn $fn_add(element: $struct) -> Index {
+		fn $fn_read<F, R>(index: u32, f: F) -> Result<R, IndexError>
+		where
+			F: FnOnce(&$variant) -> R,
+		{
+			let w = $array.read().expect(&format!(
+				"Failed to read-lock {} array",
+				stringify!($variant)
+			));
+			if let Some(element) = w.get(index as usize) {
+				Ok(f(element))
+			} else {
+				Err(IndexError::NoElement)
+			}
+		}
+
+		fn $fn_modify<F, R>(index: u32, f: F) -> Result<R, IndexError>
+		where
+			F: FnOnce(&mut $variant) -> R,
+		{
 			let mut w = $array.write().expect(&format!(
 				"Failed to write-lock {} array",
 				stringify!($variant)
 			));
-			let index = w.add(element);
-			Self::$variant(index as u32)
+			if let Some(element) = w.get_mut(index as usize) {
+				Ok(f(element))
+			} else {
+				Err(IndexError::NoElement)
+			}
 		}
 
 		#[allow(dead_code)]
-		fn $fn_remove(self) -> Result<$struct, IndexError> {
+		fn $fn_add(element: $variant) -> u32 {
+			let mut w = $array.write().expect(&format!(
+				"Failed to write-lock {} array",
+				stringify!($variant)
+			));
+			w.add(element) as u32
+		}
+
+		#[allow(dead_code)]
+		fn $fn_remove(self) -> Result<$variant, IndexError> {
 			if let Index::$variant(index) = self {
 				let mut w = $array.write().expect(&format!(
 					"Failed to write-lock {} array",
@@ -161,38 +185,42 @@ impl Index {
 	map_index!(
 		map_body,
 		map_body_mut,
+		read_body,
+		modify_body,
 		add_body,
 		remove_body,
 		BODY_INDICES,
-		Body,
 		Body
 	);
 	map_index!(
 		map_joint,
 		map_joint_mut,
+		read_joint,
+		modify_joint,
 		add_joint,
 		remove_joint,
 		JOINT_INDICES,
-		Joint,
 		Joint
 	);
 	map_index!(
 		map_shape,
 		map_shape_mut,
+		read_shape,
+		modify_shape,
 		add_shape,
 		remove_shape,
 		SHAPE_INDICES,
-		Shape,
 		Shape
 	);
 	map_index!(
 		map_space,
 		map_space_mut,
+		read_space,
+		modify_space,
 		add_space,
 		remove_space,
 		SPACE_INDICES,
-		Space,
-		SpaceHandle
+		Space
 	);
 
 	fn remove(self) -> Result<(), IndexError> {
@@ -202,36 +230,6 @@ impl Index {
 			Index::Shape(_) => self.remove_shape().map(Shape::free),
 			// TODO the space <-> "world" mapping is a mess, so skip for now.
 			Index::Space(_) => self.remove_space().map(|_| ()), //.map(Space::free),
-		}
-	}
-
-	/// Passes a shape to a closure if it exists, otherwise returns an error
-	fn read_shape<F, R>(index: u32, f: F) -> Result<R, IndexError>
-	where
-		F: FnOnce(&Shape) -> R,
-	{
-		let w = SHAPE_INDICES
-			.read()
-			.expect(&format!("Failed to read-lock {} array", stringify!(Shape)));
-		if let Some(element) = w.get(index as usize) {
-			Ok(f(element))
-		} else {
-			Err(IndexError::NoElement)
-		}
-	}
-
-	/// Passes a body to a closure if it exists, otherwise returns an error
-	fn read_body<F, R>(index: u32, f: F) -> Result<R, IndexError>
-	where
-		F: FnOnce(&Body) -> R,
-	{
-		let w = BODY_INDICES
-			.read()
-			.expect(&format!("Failed to read-lock {} array", stringify!(Body)));
-		if let Some(element) = w.get(index as usize) {
-			Ok(f(element))
-		} else {
-			Err(IndexError::NoElement)
 		}
 	}
 
@@ -313,7 +311,12 @@ fn server_init() {}
 
 fn step(delta: f32) {
 	if *ACTIVE.read().expect("Failed to check ACTIVE") {
-		crate::step_all_spaces(delta);
+		let mut w = SPACE_INDICES
+			.write()
+			.expect("Failed to write-lock SPACE_INDICES");
+		for space in w.iter_mut() {
+			space.step(delta);
+		}
 	}
 }
 

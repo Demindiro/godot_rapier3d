@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::*;
 use gdnative::core_types::*;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
@@ -238,7 +239,7 @@ fn create(shape: i32) -> Option<Index> {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			Some(Index::add_shape(shape))
+			Some(Index::Shape(Index::add_shape(shape)))
 		}
 		Err(e) => {
 			eprintln!("Invalid shape: {:?}", e);
