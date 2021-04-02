@@ -12,6 +12,7 @@ release: linux
 linux: rapier3d/api.json
 	GODOT_PATH=$(GODOT) cargo build --quiet --target $(TARGET_LINUX) --release
 	cp target/$(TARGET_LINUX)/release/librapier3d.so $(OUTPUT_DIR)/librapier3d.so
+	strip $(OUTPUT_DIR)/librapier3d.so
 
 debug: rapier3d/api.json
 	GODOT_PATH=$(GODOT) cargo build
