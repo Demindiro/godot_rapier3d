@@ -8,9 +8,11 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.space_intersect_ray(intersect_ray);
 }
 
+pub fn free(_space: Space) {}
+
 fn create() -> Option<Index> {
-	let index = Index::add_space(Space::new());
-	Index::modify_space(index, |space| space.set_index(index)).unwrap();
+	let index = SpaceIndex::add(Space::new());
+	index.map_mut(|space| space.set_index(index)).unwrap();
 	Some(Index::Space(index))
 }
 
@@ -46,8 +48,7 @@ fn intersect_ray(
 					&exclude[..],
 				)
 				.map(|res| {
-					let object_id =
-						Index::read_body(res.body, |body| body.object_id()).expect("Invalid body");
+					let object_id = res.body.map(|body| body.object_id()).expect("Invalid body");
 					result.set_position(res.position);
 					result.set_normal(res.normal);
 					result.set_object_id(object_id);

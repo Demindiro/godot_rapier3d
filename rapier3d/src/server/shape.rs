@@ -235,11 +235,16 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.shape_set_data(set_data);
 }
 
+/// Frees the given shape, removing it from any attached rigidbodies
+pub fn free(shape: Shape) {
+	shape.free();
+}
+
 fn create(shape: i32) -> Option<Index> {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			Some(Index::Shape(Index::add_shape(shape)))
+			Some(Index::Shape(ShapeIndex::add(shape)))
 		}
 		Err(e) => {
 			eprintln!("Invalid shape: {:?}", e);

@@ -1,4 +1,5 @@
 use crate::server;
+use crate::server::{BodyIndex, SpaceIndex};
 use crate::util::*;
 use gdnative::prelude::*;
 use rapier3d::dynamics::{
@@ -29,14 +30,14 @@ pub struct Space {
 	body_exclusions: BodyExclusionHooks,
 	event_handler: (),
 	query_pipeline_out_of_date: bool,
-	index: u32,
+	index: Option<SpaceIndex>,
 	pub enabled: bool,
 }
 
 pub struct RayCastResult {
 	pub position: Vector3,
 	pub normal: Vector3,
-	pub body: u32,
+	pub body: BodyIndex,
 	pub shape: u32,
 }
 
@@ -44,7 +45,7 @@ struct BodyExclusionHooks {
 	// Reasoning for using Vec and Box instead of HashMap & HashSet:
 	// * SparseVec is likely densely packed -> not many "holes" in the Vec.
 	// * Amount of body exclusions is likely small -> Vec is compact and maybe faster.
-	exclusions: Vec<Vec<u32>>,
+	exclusions: Vec<Vec<BodyIndex>>,
 }
 
 impl Space {
@@ -63,7 +64,7 @@ impl Space {
 			body_exclusions: BodyExclusionHooks::new(),
 			event_handler: (),
 			query_pipeline_out_of_date: false,
-			index: u32::MAX,
+			index: None,
 			enabled: true,
 		}
 	}
@@ -86,20 +87,23 @@ impl Space {
 	}
 
 	/// Gets the index of this space
+	///
+	/// # Panics
+	///
+	/// Panics if index is not set
 	#[allow(dead_code)]
-	pub fn index(&self) -> u32 {
-		self.index
+	pub fn index(&self) -> SpaceIndex {
+		self.index.unwrap()
 	}
 
 	/// Sets the index of this space once.
 	///
 	/// # Panics
 	///
-	/// Panics if index is already set or if index == u32::MAX
-	pub fn set_index(&mut self, index: u32) {
-		assert_ne!(index, u32::MAX);
-		assert_eq!(self.index, u32::MAX);
-		self.index = index;
+	/// Panics if index is already set
+	pub fn set_index(&mut self, index: SpaceIndex) {
+		assert_eq!(self.index, None);
+		self.index = Some(index);
 	}
 
 	/// Gets the RigidBodySet of this space
@@ -139,14 +143,18 @@ impl Space {
 
 	/// Make two bodies not interact with each other.
 	/// Returns `Ok` if the bodies did not exclude each other already, `Err` otherwise.
-	pub fn add_body_exclusion(&mut self, index_a: u32, index_b: u32) -> Result<(), ()> {
+	pub fn add_body_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
 		self.body_exclusions.add_exclusion(index_a, index_b)
 	}
 
 	/// Make two bodies interact with each other again.
 	/// Returns `Ok` if the bodies did exclude each other, `Err` otherwise.
 	#[allow(dead_code)] // FIXME body_remove_collision_exception needs to be implemented
-	pub fn remove_body_exclusion(&mut self, index_a: u32, index_b: u32) -> Result<(), ()> {
+	pub fn remove_body_exclusion(
+		&mut self,
+		index_a: BodyIndex,
+		index_b: BodyIndex,
+	) -> Result<(), ()> {
 		self.body_exclusions.remove_exclusion(index_a, index_b)
 	}
 
@@ -199,7 +207,7 @@ impl Space {
 		from: Vector3,
 		to: Vector3,
 		mask: u16,
-		exclude: &[u32],
+		exclude: &[BodyIndex],
 	) -> Option<RayCastResult> {
 		self.update_query_pipeline();
 		let dir = to - from;
@@ -233,15 +241,19 @@ impl Space {
 impl BodyExclusionHooks {
 	fn new() -> Self {
 		Self {
-			exclusions: Vec::new(),
+			exclusions: Vec::<Vec<BodyIndex>>::new(),
 		}
 	}
 
-	fn add_exclusion(&mut self, index_a: u32, index_b: u32) -> Result<(), ()> {
+	fn add_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
 		// TODO how should we handle self-exclusions? (index_a == index_b)
 		let (a, b) = (index_a, index_b);
-		let (a, b) = if a < b { (a, b) } else { (b, a) };
-		if let Some(vec) = self.exclusions.get_mut(a as usize) {
+		let (a, b) = if a.index() < b.index() {
+			(a, b)
+		} else {
+			(b, a)
+		};
+		if let Some(vec) = self.exclusions.get_mut(a.index() as usize) {
 			if vec.contains(&b) {
 				Err(())
 			} else {
@@ -249,18 +261,23 @@ impl BodyExclusionHooks {
 				Ok(())
 			}
 		} else {
-			self.exclusions.resize_with(a as usize + 1, || Vec::new());
-			self.exclusions[a as usize] = Vec::from([b]);
+			self.exclusions
+				.resize_with(a.index() as usize + 1, || Vec::new());
+			self.exclusions[a.index() as usize] = Vec::from([b]);
 			Ok(())
 		}
 	}
 
 	// TODO implement body_remove_exception and remove the allow
 	#[allow(dead_code)]
-	fn remove_exclusion(&mut self, index_a: u32, index_b: u32) -> Result<(), ()> {
+	fn remove_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
 		let (a, b) = (index_a, index_b);
-		let (a, b) = if a < b { (a, b) } else { (b, a) };
-		if let Some(vec) = self.exclusions.get_mut(a as usize) {
+		let (a, b) = if a.index() < b.index() {
+			(a, b)
+		} else {
+			(b, a)
+		};
+		if let Some(vec) = self.exclusions.get_mut(a.index() as usize) {
 			vec.swap_remove(vec.iter().position(|&e| e == b).ok_or(())?);
 			Ok(())
 		} else {
@@ -275,11 +292,16 @@ impl PhysicsHooks for BodyExclusionHooks {
 	}
 
 	fn filter_contact_pair(&self, context: &PairFilterContext) -> Option<SolverFlags> {
-		let body_a = server::Body::get_index(context.rigid_body1);
-		let body_b = server::Body::get_index(context.rigid_body2);
-		if let Some(indices) = self.exclusions.get(body_a as usize) {
+		let a = server::Body::get_index(context.rigid_body1);
+		let b = server::Body::get_index(context.rigid_body2);
+		let (a, b) = if a.index() < b.index() {
+			(a, b)
+		} else {
+			(b, a)
+		};
+		if let Some(indices) = self.exclusions.get(a.index() as usize) {
 			for &i in indices.iter() {
-				if i == body_b {
+				if i == b {
 					return None;
 				}
 			}

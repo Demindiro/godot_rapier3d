@@ -2,6 +2,7 @@
 
 mod server;
 mod space;
+mod sparse_vec;
 mod util;
 
 // TODO find a proper workaround for E0446
