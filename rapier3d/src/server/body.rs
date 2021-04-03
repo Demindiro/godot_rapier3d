@@ -580,7 +580,7 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 		// is_equal_approx (not implemented yet) should be close enough
 		// FIXME `set_shape` exists since 0.7, use that instead of the current remove/read thing.
 		// FIXME temporarily disabled due to https://github.com/dimforge/rapier/issues/163
-		if scale_changed && false {
+		if scale_changed {
 			body.recalculate_inertia();
 			let colliders = body.create_colliders(body_index);
 			if let Instance::Attached((rb, _), space) = &mut body.body {
