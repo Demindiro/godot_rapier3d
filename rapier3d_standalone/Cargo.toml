@@ -1,0 +1,13 @@
+[package]
+name = "godot_rapier3d_standalone"
+version = "0.1.0"
+authors = ["David Hoppenbrouwers <david@salt-inc.org>"]
+edition = "2018"
+
+[lib]
+name = "rapier3d"
+crate-type = ["cdylib"]
+
+[dependencies]
+godot_rapier3d = { path = "../rapier3d" }
+gdnative = "*"

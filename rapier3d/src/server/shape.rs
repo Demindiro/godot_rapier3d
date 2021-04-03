@@ -1,7 +1,6 @@
 use super::*;
-use core::mem;
+use crate::util::*;
 use gdnative::core_types::*;
-use gdnative::sys;
 use rapier3d::geometry::SharedShape;
 use rapier3d::math::Point;
 use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1, Point3};
@@ -236,14 +235,19 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.shape_set_data(set_data);
 }
 
+/// Frees the given shape, removing it from any attached rigidbodies
+pub fn free(shape: Shape) {
+	shape.free();
+}
+
 fn create(shape: i32) -> Option<Index> {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			Some(Index::add_shape(shape))
+			Some(Index::Shape(ShapeIndex::add(shape)))
 		}
 		Err(e) => {
-			eprintln!("Invalid shape: {:?}", e);
+			godot_error!("Invalid shape: {:?}", e);
 			None
 		}
 	}
@@ -252,7 +256,7 @@ fn create(shape: i32) -> Option<Index> {
 fn set_data(shape: Index, data: &Variant) {
 	map_or_err!(shape, map_shape_mut, |shape, _| {
 		if let Err(e) = shape.apply_data(&data) {
-			eprintln!("Failed to apply data: {:?}", e);
+			godot_error!("Failed to apply data: {:?}", e);
 		}
 	});
 }

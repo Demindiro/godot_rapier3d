@@ -1,10 +1,9 @@
 use super::*;
-use crate::vec_gd_to_na;
-use core::mem;
+use crate::util::*;
 use gdnative::core_types::*;
-use gdnative::sys;
-use rapier3d::dynamics::{self, JointHandle, JointParams, RevoluteJoint, SpringModel};
-use rapier3d::math::{Point, Vector};
+use gdnative::godot_error;
+use rapier3d::dynamics::{JointHandle, JointParams, RevoluteJoint, SpringModel};
+use rapier3d::math::Point;
 use rapier3d::na::Unit;
 
 pub struct Joint {
@@ -13,8 +12,10 @@ pub struct Joint {
 
 struct LooseJoint {
 	params: JointParams,
-	body_a: u32,
-	body_b: u32,
+	#[allow(dead_code)]
+	body_a: BodyIndex,
+	#[allow(dead_code)]
+	body_b: BodyIndex,
 }
 
 #[derive(Debug)]
@@ -40,26 +41,19 @@ enum ParamError {
 }
 
 impl Joint {
-	fn new<T>(joint: T, body_a: u32, body_b: u32) -> Self
+	fn new<T>(joint: T, body_a: BodyIndex, body_b: BodyIndex) -> Self
 	where
 		T: Into<JointParams> + Copy,
 	{
 		let params = joint.into();
-		let result = Index::read_body(body_a, |body_a| {
-			Index::read_body(body_b, |body_b| {
+		let result = body_a.map(|body_a| {
+			body_b.map(|body_b| {
 				if let Some((body_a, space_a)) = body_a.as_attached() {
 					if let Some((body_b, space_b)) = body_b.as_attached() {
 						if space_a == space_b {
 							return Some((
 								space_a
-									.modify(|space| {
-										space.joints.insert(
-											&mut space.bodies,
-											body_a,
-											body_b,
-											joint,
-										)
-									})
+									.map_mut(|space| space.add_joint(params, body_a, body_b))
 									.expect("Invalid space"),
 								space_a,
 							));
@@ -87,11 +81,11 @@ impl Joint {
 	}
 
 	/// Frees this hinge, removing it from it's attached bodies (if any)
-	pub fn free(mut self) {
+	fn free(mut self) {
 		match &mut self.joint {
 			Instance::Attached(jh, space) => {
 				space
-					.modify(|space| space.joints.remove(*jh, &mut space.bodies, true))
+					.map_mut(|space| space.remove_joint(*jh))
 					.expect("Invalid space");
 			}
 			Instance::Loose(_) => {}
@@ -131,6 +125,11 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.hinge_joint_set_param(set_hinge_param);
 }
 
+/// Frees the given hinge, removing it from it's attached bodies (if any)
+pub fn free(joint: Joint) {
+	joint.free();
+}
+
 fn create_hinge(
 	body_a: Index,
 	transform_a: &Transform,
@@ -149,7 +148,6 @@ fn create_hinge(
 		godot_error!("ID B does not point to a body");
 		return None;
 	};
-	dbg!(transform_a, transform_b);
 
 	let origin_a = transform_a.origin;
 	let origin_b = transform_b.origin;
@@ -175,7 +173,9 @@ fn create_hinge(
 	joint.basis1 = basis_a;
 	joint.basis2 = basis_b;
 
-	Some(Index::add_joint(Joint::new(joint, body_a, body_b)))
+	Some(Index::Joint(JointIndex::add(Joint::new(
+		joint, body_a, body_b,
+	))))
 }
 
 fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
@@ -206,10 +206,10 @@ fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
 		match &mut joint.joint {
 			Instance::Attached(jh, space) => {
 				space
-					.modify(|space| {
+					.map_mut(|space| {
 						apply(
 							&mut space
-								.joints
+								.joints_mut()
 								.get_mut(*jh)
 								.expect("Invalid joint handle")
 								.params,
@@ -256,10 +256,10 @@ fn set_hinge_param(joint: Index, param: i32, value: f32) {
 		match &mut joint.joint {
 			Instance::Attached(jh, space) => {
 				space
-					.modify(|space| {
+					.map_mut(|space| {
 						apply(
 							&mut space
-								.joints
+								.joints_mut()
 								.get_mut(*jh)
 								.expect("Invalid joint handle")
 								.params,

@@ -4,7 +4,35 @@
 This script generates the method overrides and the FFI struct based on the
 contents of `server.h`. It also dumps a JSON file with all functions for use
 with other languages (i.e. Rust).
+
+`api.json` format:
+- `methods` table: represents a C struct containing a list of function pointers
+  to communicate with the `PhysicsServer`.
+  - Each entry has the following fields:
+    - `name`: name of the method,
+    - `return_type`: type of the returned value,
+    - `arguments`: array of parameters. Each parameter has the following fields:
+      - `name`: name of the parameter.
+      - `type`: type of the parameter.
+- `structs` table: contains a table of C structs used in some of the methods as
+  a parameter. These only contain data fields (no function pointers).
+    - key: name of the struct.
+    - value: members of the struct. Each member has the following fields:
+      - `name`: name of the member,
+      - `type`: type of the member,
+
+A few special types have been defined too:
+- `index_t`: A replacement of Godot's RID class that is FFI-friendly. This must
+  never be invalid (i.e. it must never be `0`)
+- `maybe_index_t`: The same as `index_t`, but it may be invalid (i.e. it may be 0)
+- `real_t`: either a 32-bit or 64-bit float depending on how the engine was
+  compiled. Currently, Godot only supports 32-bit `real_t`s
 """
+
+# FIXME soft_body_set_mesh is currently not included in the FFI API, because
+# - passing `const REF *` naively results in what is effectively `const godot_object **`, which is
+#   rather pointless and just makes things complicated.
+# - There are no softbodies in Rapier to test against at the moment
 
 
 # Functions to exclude from server.gen.cpp
@@ -18,6 +46,7 @@ SERVER_EXCLUDE = {
     'init',
     'soft_body_get_collision_exceptions',
     'soft_body_update_visual_server',
+    'soft_body_set_mesh',
     'space_get_direct_state',
     'step',
 }
@@ -32,6 +61,7 @@ API_EXCLUDE = {
     'free',
     'soft_body_get_collision_exceptions',
     'soft_body_update_visual_server',
+    'soft_body_set_mesh',
     'space_get_direct_state',
 }
 
@@ -42,19 +72,69 @@ API_MAYBE_RIDS = {
 
 # Extra functions to add to the API
 API_CUSTOM_FUNCTIONS = {
-    'area_get_monitor_event': ('void', [('uint32_t', 'index', True), ('physics_area_monitor_event_mut_t', 'event', False)], True),
-    'area_get_monitor_event_count': ('uint32_t', [], True),
-    'body_get_direct_state': ('void', [('index_t', 'body', True), ('physics_body_state_mut_t', 'state', False)], True),
-    'body_get_collision_exception': ('index_t', [('index_t', 'body', True), ('int', 'index', True)], True),
-    'body_get_collision_exception_count': ('int', [('index_t', 'body', True)], True),
-    'free': ('void', [('index_mut_t', 'id', False)], False),
+    'area_get_monitor_event': ('void', [
+        ('uint32_t', 'index'),
+        ('struct physics_area_monitor_event *', 'event')
+    ]),
+    'area_get_monitor_event_count': ('uint32_t', []),
+    'body_get_direct_state': ('void', [
+        ('index_t', 'body'),
+        ('struct physics_body_state *', 'state')
+    ]),
+    'body_get_collision_exception': ('index_t', [
+        ('index_t', 'body'),
+        ('int', 'index')
+    ]),
+    'body_get_collision_exception_count': ('int', [
+        ('index_t', 'body')
+    ]),
+    'free': ('void', [
+        ('index_t', 'id')
+    ]),
     'space_intersect_ray': ('bool', [
-        ('index_t', 'space', True),
-        ('struct physics_ray_info *', 'info', True),
-        ('struct physics_ray_result *', 'result', False),
-    ], False),
-    'soft_body_get_collision_exception': ('index_t', [('index_t', 'body', True), ('int', 'index', True)], True),
-    'soft_body_get_collision_exception_count': ('int', [('index_t', 'body', True)], True),
+        ('index_t', 'space'),
+        ('const struct physics_ray_info *', 'info'),
+        ('struct physics_ray_result *', 'result'),
+    ]),
+    'soft_body_get_collision_exception': ('index_t', [
+        ('index_t', 'body'),
+        ('int', 'index')
+    ]),
+    'soft_body_get_collision_exception_count': ('int', [
+        ('index_t', 'body')
+    ]),
+}
+
+# Structs to include in the API
+API_STRUCTS = {
+    'physics_body_state': [
+        ('godot_transform', 'transform'),
+        ('godot_vector3', 'linear_velocity'),
+        ('godot_vector3', 'angular_velocity'),
+        ('godot_vector3', 'center_of_mass'),
+        ('real_t', 'inv_mass'),
+        ('index_t', 'space'),
+        ('bool', 'sleeping'),
+    ],
+    'physics_ray_info': [
+        ('godot_vector3', 'from'),
+        ('godot_vector3', 'to'),
+        ('const index_t *', 'exclude'),
+        ('size_t', 'exclude_count'),
+        ('uint32_t', 'collision_mask'),
+        ('bool', 'collide_with_bodies'),
+        ('bool', 'collide_with_areas'),
+        ('bool', 'pick_ray'),
+    ],
+    'physics_ray_result': [
+        ('godot_vector3', 'position'),
+        ('godot_vector3', 'normal'),
+        ('index_t', 'id'),
+        ('int', 'object_id'),
+        ('int', 'shape'),
+    ],
+    'physics_area_monitor_event': [
+    ]
 }
 
 # Functions for which to validate all RIDs
@@ -126,7 +206,6 @@ c_to_cpp = {
     'godot_pool_vector3_array': 'Vector<Vector3>',
 }
 cpp_to_c = {v: k for k, v in c_to_cpp.items()}
-cpp_to_c['REF'] = 'godot_object'
 
 
 physics_type_map_cpp = {}
@@ -150,8 +229,6 @@ physics_type_map_c['Variant'] = 'godot_variant'
 physics_type_map_c['StringName *'] = 'godot_string_name *'
 physics_type_map_c['RID'] = 'index_t'
 physics_type_map_c['ObjectID'] = 'int'
-physics_type_map_c['real_t'] = 'float'
-physics_type_map_c['REF *'] = 'godot_object *'
 
 
 def generate_method_table(header_file):
@@ -225,11 +302,14 @@ def clean_method_table(table):
                 t += ' *'
                 n = n[1:]
             t = physics_type_map_c.get(t, t)
-            args[i] = (t, n, c)
+            # Don't make non-pointer types const to simplify API
+            if c and t[-1] == '*':
+                t = 'const ' + t
+            args[i] = (t, n)
         # Presumably all API methods can fail somehow, thus RID can be null
         if ret == 'index_t':
             ret = 'maybe_index_t'
-        table[method] = (ret, args, const)
+        table[method] = (ret, args)
 
 
 def generate_api_h(method_table, api_h):
@@ -237,31 +317,39 @@ def generate_api_h(method_table, api_h):
         '#ifndef PLUGGABLE_PHYSICS_SERVER_FN_TABLE_H\n'
         '#define PLUGGABLE_PHYSICS_SERVER_FN_TABLE_H\n'
         '\n'
-        '#include "index.h"\n'
-        '#include "body_state.h"\n'
-        '#include "space_state.h"\n'
         '\n'
-        '#include "core/rid.h"\n'
-        '#include "servers/physics_server.h"\n'
+        '#include "core/reference.h"\n'
+        '#include "index.h"\n'
+        '#include "typedef.h"\n'
         '\n'
         '#ifdef __cplusplus\n'
         'extern "C" {\n'
         '#endif\n'
         '\n'
-        '\tstruct fn_table {\n'
     )
 
-    for method, (ret, args, is_const) in method_table.items():
-        args = ', '.join(f'{"const " if c else ""}{t} {n}' for t, n, c in args)
-        line = f'\t\t{ret} (*{method}) ({args})'
+    for name, members in API_STRUCTS.items():
+        api_h.write(f'struct {name} {{\n')
+        for t, n in members:
+            api_h.write(f'\t{t} {n};\n')
+        api_h.write('};\n\n')
+
+    api_h.write('struct fn_table {\n')
+
+    for method, (ret, args) in method_table.items():
+        args = ', '.join((' '.join(v) for v in args))
+        line = f'\t{ret} (*{method}) ({args})'
         if line.endswith('const'):
             line = line[:-len('const')]
         line += ';\n'
         api_h.write(line)
 
     api_h.write(
-        '\t};\n'
+        '};\n'
         '\n'
+    )
+
+    api_h.write(
         '#ifdef __cplusplus\n'
         '}\n'
         '#endif\n'
@@ -271,18 +359,15 @@ def generate_api_h(method_table, api_h):
 
 
 def generate_api_json(method_table, api_json):
-    api_json.write('{')
-    skip_comma = True # JSON doesn't allow trailing commas :(
-    for method, (ret, args, is_const) in method_table.items():
-        if skip_comma:
-            skip_comma = False
-        else:
-            api_json.write(',')
-        args = '[' + ', '.join([f'{{"type": "{t}", "name": "{n}", "const": {"true" if c else "false"}}}' for t, n, c in args]) + ']'
-        ret = f'{{"type": "{ret}", "const": {"true" if is_const else "false"}}}'
-        line = f'\n\t"{method}": {{"return": {ret}, "args": {args}}}'
-        api_json.write(line)
-    api_json.write('\n}')
+    methods = []
+    for i, (method, (ret, args)) in enumerate(method_table.items()):
+        args = [{'type': t, 'name': n} for t, n in args]
+        methods.append({'name': method, 'return_type': ret, 'arguments': args})
+
+    structs = {n: [{'type': t, 'name': n} for t, n in m] for n, m in API_STRUCTS.items()}
+
+    from json import dump
+    dump({"methods": methods, "structs": structs}, api_json, indent='\t', separators=(',', ': '))
 
 
 def generate_server_cpp(method_table, server_cpp):
