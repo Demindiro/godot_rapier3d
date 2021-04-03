@@ -247,7 +247,7 @@ fn create(shape: i32) -> Option<Index> {
 			Some(Index::Shape(ShapeIndex::add(shape)))
 		}
 		Err(e) => {
-			eprintln!("Invalid shape: {:?}", e);
+			godot_error!("Invalid shape: {:?}", e);
 			None
 		}
 	}
@@ -256,7 +256,7 @@ fn create(shape: i32) -> Option<Index> {
 fn set_data(shape: Index, data: &Variant) {
 	map_or_err!(shape, map_shape_mut, |shape, _| {
 		if let Err(e) = shape.apply_data(&data) {
-			eprintln!("Failed to apply data: {:?}", e);
+			godot_error!("Failed to apply data: {:?}", e);
 		}
 	});
 }

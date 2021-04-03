@@ -127,7 +127,7 @@ impl Body {
 		if let Some(shape) = self.shapes.get_mut(index as usize) {
 			f(shape);
 		} else {
-			eprintln!("Invalid shape index");
+			godot_error!("Invalid shape index");
 		}
 	}
 
@@ -573,7 +573,7 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 					body.scale = scale;
 				}
 			},
-			Err(e) => eprintln!("Invalid state: {:?}", e),
+			Err(e) => godot_error!("Invalid state: {:?}", e),
 		}
 
 		// Recreating colliders is potentially very expensive, so avoid it when possible
