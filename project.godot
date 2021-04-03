@@ -33,7 +33,6 @@ run/main_scene="res://benchmark/benchmark.tscn"
 [autoload]
 
 BatchedMeshManager="*res://addons/3d_batcher/batched_mesh_manager.gdns"
-Rapier3d="*res://addons/rapier3d/rapier3d.gdns"
 
 [editor_plugins]
 

@@ -6,35 +6,6 @@
 #include "typedef.h"
 #include "servers/physics_server.h"
 
-
-// This struct misses the object pointer intentionally, it does not make much sense
-// to have a pointer when there is also an ObjectID. ObjectIDs are also much safer
-// to handle.
-// It also replaces RID with an index_t
-struct physics_ray_result {
-	godot_vector3 position;
-	godot_vector3 normal;
-	index_t id;
-	int object_id;
-	int shape;
-};
-
-// Using a struct for passing a lot of info is easier to manage. It also sidesteps the difficulties
-// with correctly generating safe Rust code that involves reconstructing a slice from a pointer and
-// a length.
-struct physics_ray_info {
-	godot_vector3 from;
-	godot_vector3 to;
-	index_t *exclude;
-	size_t exclude_count;
-	uint32_t collision_mask;
-	bool collide_with_bodies;
-	bool collide_with_areas;
-	bool pick_ray;
-};
-
-
-#ifdef __cplusplus
 class PluggablePhysicsServer;
 
 class PluggablePhysicsDirectSpaceState : public PhysicsDirectSpaceState {
@@ -70,7 +41,5 @@ public:
 
 	virtual Vector3 get_closest_point_to_object_volume(RID p_object, const Vector3 p_point) const;
 };
-#endif
-
 
 #endif

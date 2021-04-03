@@ -70,8 +70,10 @@ void PluggablePhysicsServer::step(float delta) {
 	while ((id = this->callbacks.next(id)) != nullptr) {
 
 		(*this->fn_table.body_get_direct_state)(*id, &this->body_state_singleton->state);
+
 		this->body_state_singleton->delta = delta;
 		this->body_state_singleton->body = *id;
+
 		// I'd like to note just how much I hate C++
 		// I was stuck on this not working for two hours or so
 		// Then I added some code below (now commented) to see why the hell shit isn't getting called
@@ -113,9 +115,7 @@ void PluggablePhysicsServer::free(RID rid) {
 	this->rids.free(rid);
 	this->reverse_rids.erase(id);
 	this->callbacks.erase(id);
-	// SAFETY: the RID is removed
-	index_mut_t mut_id = (index_mut_t)id;
-	(*this->fn_table.free)(mut_id);
+	(*this->fn_table.free)(id);
 }
 
 PhysicsDirectSpaceState *PluggablePhysicsServer::space_get_direct_state(RID space) {
@@ -130,5 +130,9 @@ void PluggablePhysicsServer::soft_body_update_visual_server(RID soft_body, SoftB
 }
 
 void PluggablePhysicsServer::soft_body_get_collision_exceptions(RID soft_body, List<RID> *list) {
+	ERR_FAIL_MSG("TODO");
+}
+
+void PluggablePhysicsServer::soft_body_set_mesh(RID soft_body, const REF &mesh) {
 	ERR_FAIL_MSG("TODO");
 }

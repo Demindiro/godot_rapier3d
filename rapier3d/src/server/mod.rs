@@ -188,6 +188,10 @@ impl ObjectID {
 	fn new(n: u32) -> Option<Self> {
 		NonZeroU32::new(n).map(Self)
 	}
+
+	fn get(self) -> u32 {
+		self.0.get()
+	}
 }
 
 #[macro_export]

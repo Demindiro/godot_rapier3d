@@ -14,46 +14,10 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use std::slice;
 
-// TODO ditto below
-#[repr(C)]
-pub struct PhysicsBodyState {
-	transform: sys::godot_transform,
-	linear_velocity: sys::godot_vector3,
-	angular_velocity: sys::godot_vector3,
-	center_of_mass: sys::godot_vector3,
-	inv_mass: f32,
-	space_index: u64,
-	sleeping: bool,
-}
-
-#[repr(C)]
-pub struct PhysicsSpaceState {}
-
-#[repr(C)]
-pub struct AreaMonitorEvent {}
-
-// TODO include this in api.json
-#[repr(C)]
-pub struct PhysicsRayResult {
-	position: sys::godot_vector3,
-	normal: sys::godot_vector3,
-	id: u64,
-	object_id: Option<ObjectID>,
-	shape: i32,
-}
-
-// TODO include this in api.json
-#[repr(C)]
-pub struct PhysicsRayInfo {
-	from: sys::godot_vector3,
-	to: sys::godot_vector3,
-	exclude: *const u64,
-	exclude_count: usize,
-	collision_mask: u32,
-	collide_with_bodies: bool,
-	collide_with_areas: bool,
-	pick_ray: bool,
-}
+pub type PhysicsBodyState = physics_body_state;
+pub type PhysicsAreaMonitorEvent = physics_area_monitor_event;
+pub type PhysicsRayResult = physics_ray_result;
+pub type PhysicsRayInfo = physics_ray_info;
 
 #[macro_export]
 macro_rules! gdphysics_init {
@@ -84,7 +48,7 @@ impl FFI {
 
 impl PhysicsBodyState {
 	pub fn set_space(&mut self, index: Index) {
-		self.space_index = index.raw();
+		self.space = index.raw();
 	}
 
 	pub fn set_transform(&mut self, transform: &Transform) {
@@ -133,7 +97,7 @@ impl PhysicsRayResult {
 	}
 
 	pub fn set_object_id(&mut self, id: Option<ObjectID>) {
-		self.object_id = id
+		self.object_id = id.map(ObjectID::get).unwrap_or(0) as i32;
 	}
 
 	pub fn set_shape(&mut self, index: u32) {

@@ -5,6 +5,5 @@
 
 typedef uint64_t maybe_index_t;
 typedef uint64_t index_t;
-typedef uint64_t index_mut_t;
 
 #endif

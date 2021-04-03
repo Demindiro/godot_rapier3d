@@ -28,5 +28,5 @@ clean:
 rapier3d/api.json: module/api.json
 	cp module/api.json rapier3d/api.json
 
-module/api.json:
+module/api.json: module/generate.py
 	cd module && ./generate.py

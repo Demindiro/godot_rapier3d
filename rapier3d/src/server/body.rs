@@ -324,7 +324,7 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 	});
 }
 
-fn add_force(body: Index, force: Vector3, position: Vector3) {
+fn add_force(body: Index, force: &Vector3, position: &Vector3) {
 	map_or_err!(body, map_body, |body, _| {
 		if let Instance::Attached((body, _), space) = &body.body {
 			space
@@ -353,7 +353,7 @@ fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 	});
 }
 
-fn apply_impulse(body: Index, position: Vector3, impulse: Vector3) {
+fn apply_impulse(body: Index, position: &Vector3, impulse: &Vector3) {
 	map_or_err!(body, map_body, |body, _| {
 		if let Instance::Attached((body, _), space) = &body.body {
 			space
@@ -608,12 +608,12 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 /// to help out
 fn transform_force_arguments(
 	body: &RigidBody,
-	position: Vector3,
-	direction: Vector3,
+	position: &Vector3,
+	direction: &Vector3,
 ) -> (na::Point3<f32>, na::Vector3<f32>) {
 	let position = na::Point3::new(position.x, position.y, position.z);
 	let tr = body.position().translation;
 	let position = position + na::Vector3::new(tr.x, tr.y, tr.z);
-	let direction = vec_gd_to_na(direction);
+	let direction = vec_gd_to_na(*direction);
 	(position, direction)
 }
