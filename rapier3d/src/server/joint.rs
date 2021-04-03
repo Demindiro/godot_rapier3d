@@ -148,7 +148,6 @@ fn create_hinge(
 		godot_error!("ID B does not point to a body");
 		return None;
 	};
-	dbg!(transform_a, transform_b);
 
 	let origin_a = transform_a.origin;
 	let origin_b = transform_b.origin;
