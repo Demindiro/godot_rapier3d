@@ -212,6 +212,12 @@ impl Space {
 		self.update_query_pipeline();
 		let dir = to - from;
 		let (dir, max_toi) = (dir.normalize(), dir.length());
+		let filter = if exclude.len() > 0 {
+			Some(|_, c: &'_ _| !exclude.contains(&server::Body::get_shape_userdata(c).0))
+		} else {
+			None
+		};
+		let filter = filter.as_ref();
 		// TODO account for excluded colliders
 		// Rapier 0.7 added a `filter` parameter which can be used for the exclusion list.
 		let intersection = self.query_pipeline.cast_ray_and_get_normal(
@@ -221,7 +227,7 @@ impl Space {
 			// TODO what is the solid parameter for?
 			false,
 			InteractionGroups::new(u16::MAX, mask),
-			None,
+			filter.map(|v| v as &dyn Fn(_, &'_ _) -> bool),
 		);
 		intersection.map(|(collider, intersection)| {
 			let position = dir * intersection.toi + from; // MulAdd not implemented :(
