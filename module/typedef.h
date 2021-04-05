@@ -3,6 +3,7 @@
 
 #include "core/variant.h"
 
+typedef Basis godot_basis;
 typedef Transform godot_transform;
 typedef Vector3 godot_vector3;
 typedef Variant godot_variant;

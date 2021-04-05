@@ -16,6 +16,12 @@
 //#include "gdnative/gdnative.h"
 
 
+#define EXEC_FFI_FN(_server_, _fn_, ...) do { \
+	ERR_FAIL_COND_MSG((_server_)->fn_table._fn_ == nullptr, "Not implemented"); \
+	(*(_server_)->fn_table._fn_)(__VA_ARGS__); \
+} while (0)
+
+
 class PluggablePhysicsRID_Data : public RID_Data {
 	friend class PluggablePhysicsServer;
 	index_t index;

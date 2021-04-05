@@ -31,12 +31,16 @@ pub fn isometry_to_transform(isometry: &Isometry<f32>) -> Transform {
 		isometry.translation.z,
 	);
 	let rot = isometry.rotation.to_rotation_matrix();
-	let basis = Basis {
-		elements: [
-			Vector3::new(rot[(0, 0)], rot[(0, 1)], rot[(0, 2)]),
-			Vector3::new(rot[(1, 0)], rot[(1, 1)], rot[(1, 2)]),
-			Vector3::new(rot[(2, 0)], rot[(2, 1)], rot[(2, 2)]),
-		],
-	};
+	let basis = mat3_to_basis(&rot.matrix());
 	Transform { basis, origin }
+}
+
+pub fn mat3_to_basis(mat: &na::Matrix3<f32>) -> Basis {
+	Basis {
+		elements: [
+			Vector3::new(mat[(0, 0)], mat[(0, 1)], mat[(0, 2)]),
+			Vector3::new(mat[(1, 0)], mat[(1, 1)], mat[(1, 2)]),
+			Vector3::new(mat[(2, 0)], mat[(2, 1)], mat[(2, 2)]),
+		],
+	}
 }

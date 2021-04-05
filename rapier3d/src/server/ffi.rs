@@ -66,6 +66,29 @@ impl PhysicsBodyState {
 		self.angular_velocity = velocity.to_sys();
 	}
 
+	pub fn set_inv_inertia(&mut self, inv_inertia: Vector3) {
+		self.inv_inertia = inv_inertia.to_sys();
+	}
+
+	pub fn set_inv_inertia_tensor(&mut self, inv_inertia_tensor: &Basis) {
+		// SAFETY: inv_inertia_tensor is guaranteed to be valid
+		unsafe {
+			self.inv_inertia_tensor = *inv_inertia_tensor.sys();
+		}
+	}
+
+	pub fn set_gravity(&mut self, gravity: Vector3) {
+		self.gravity = gravity.to_sys();
+	}
+
+	pub fn set_linear_damp(&mut self, damp: f32) {
+		self.linear_damp = damp;
+	}
+
+	pub fn set_angular_damp(&mut self, damp: f32) {
+		self.angular_damp = damp;
+	}
+
 	pub fn set_sleeping(&mut self, sleeping: bool) {
 		self.sleeping = sleeping;
 	}

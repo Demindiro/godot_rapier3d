@@ -440,7 +440,14 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 						state.set_linear_velocity(vec_na_to_gd(*body.linvel()));
 						state.set_angular_velocity(vec_na_to_gd(*body.angvel()));
 						state.set_sleeping(body.is_sleeping());
-						state.set_inv_mass(body.mass_properties().inv_mass);
+						state.set_linear_damp(body.linear_damping);
+						state.set_angular_damp(body.angular_damping);
+						let mp = body.mass_properties();
+						state.set_inv_mass(mp.inv_mass);
+						let inv_inertia_sqrt = vec_na_to_gd(mp.inv_principal_inertia_sqrt);
+						state.set_inv_inertia(inv_inertia_sqrt.component_mul(inv_inertia_sqrt));
+						let inv_inertia_tensor = mp.reconstruct_inverse_inertia_matrix();
+						state.set_inv_inertia_tensor(&mat3_to_basis(&inv_inertia_tensor));
 					})
 					.expect("Invalid space");
 			}
