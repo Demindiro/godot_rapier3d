@@ -4,7 +4,7 @@ use crate::util::*;
 use gdnative::core_types::*;
 use gdnative::{godot_error, godot_warn};
 use rapier3d::dynamics::{
-	ActivationStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
+	ActivationStatus, BodyStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
 };
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
@@ -40,11 +40,21 @@ enum State {
 	CanSleep(bool),
 }
 
+enum Mode {
+	Static,
+	Kinematic,
+	Rigid,
+	Character,
+}
+
 #[derive(Debug)]
 enum StateError {
 	InvalidType,
 	InvalidValue,
 }
+
+#[derive(Debug)]
+struct InvalidMode;
 
 struct Shape {
 	index: ShapeIndex,
@@ -108,6 +118,18 @@ impl State {
 			3 => State::Sleeping(value.try_to_bool().ok_or(StateError::InvalidValue)?),
 			4 => State::CanSleep(value.try_to_bool().ok_or(StateError::InvalidValue)?),
 			_ => return Err(StateError::InvalidType),
+		})
+	}
+}
+
+impl Mode {
+	fn new(n: i32) -> Result<Self, InvalidMode> {
+		Ok(match n {
+			0 => Self::Static,
+			1 => Self::Kinematic,
+			2 => Self::Rigid,
+			3 => Self::Character,
+			_ => return Err(InvalidMode),
 		})
 	}
 }
@@ -291,6 +313,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_remove_shape(remove_shape);
 	ffi.body_set_collision_layer(set_collision_layer);
 	ffi.body_set_collision_mask(set_collision_mask);
+	ffi.body_set_mode(set_mode);
 	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
@@ -518,6 +541,40 @@ fn set_collision_mask(body: Index, mask: u32) {
 				.expect("Invalid space");
 		}
 	});
+}
+
+fn set_mode(body: Index, mode: i32) {
+	match Mode::new(mode) {
+		Ok(mode) => {
+			let mode = match mode {
+				Mode::Static => BodyStatus::Static,
+				Mode::Kinematic => BodyStatus::Kinematic,
+				Mode::Rigid => BodyStatus::Dynamic,
+				Mode::Character => {
+					godot_error!("Character mode is not supported");
+					return;
+				}
+			};
+			map_or_err!(body, map_body_mut, |body, _| {
+				match &mut body.body {
+					Instance::Attached((rb, _), space) => {
+						space
+							.map_mut(|s| {
+								s.bodies_mut()
+									.get_mut(*rb)
+									.expect("Invalid body handle")
+									.set_body_status(mode)
+							})
+							.expect("Invalid space");
+					}
+					Instance::Loose(body) => {
+						body.set_body_status(mode);
+					}
+				}
+			});
+		}
+		Err(_) => godot_error!("Invalid mode"),
+	}
 }
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
