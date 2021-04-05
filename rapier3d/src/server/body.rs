@@ -296,6 +296,9 @@ fn create(r#type: i32, sleep: bool) -> Option<Index> {
 }
 
 fn add_collision_exception(body_a: Index, body_b: Index) {
+	if body_a == body_b {
+		return; // There is no point excluding the body from itself
+	}
 	map_or_err!(body_a, map_body_mut, |body_a, index_a| {
 		if let Index::Body(index_b) = body_b {
 			if !body_a.exclusions.contains(&index_b) {
@@ -309,8 +312,6 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 						})
 						.expect("Invalid space");
 				}
-			} else {
-				godot_error!("Body A already excludes B");
 			}
 		}
 	});
@@ -318,8 +319,6 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 		if let Index::Body(index_a) = body_a {
 			if !body_b.exclusions.contains(&index_a) {
 				body_b.exclusions.push(index_a);
-			} else {
-				godot_error!("Body B already excludes A");
 			}
 		}
 	});
