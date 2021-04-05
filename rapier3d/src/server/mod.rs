@@ -95,10 +95,8 @@ macro_rules! map_index {
 			where
 				F: FnOnce(&$variant) -> R,
 			{
-				let w = $array.read().expect(&format!(
-					"Failed to read-lock {} array",
-					stringify!($variant)
-				));
+				const MSG: &str = concat!("Failed to read-lock ", stringify!($variant), " array");
+				let w = $array.read().expect(MSG);
 				if let Some(element) = w.get(self.index() as usize) {
 					Ok(f(element))
 				} else {
@@ -110,10 +108,8 @@ macro_rules! map_index {
 			where
 				F: FnOnce(&mut $variant) -> R,
 			{
-				let mut w = $array.write().expect(&format!(
-					"Failed to write-lock {} array",
-					stringify!($variant)
-				));
+				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
+				let mut w = $array.write().expect(MSG);
 				if let Some(element) = w.get_mut(self.index() as usize) {
 					Ok(f(element))
 				} else {
@@ -122,18 +118,14 @@ macro_rules! map_index {
 			}
 
 			fn add(element: $variant) -> Self {
-				let mut w = $array.write().expect(&format!(
-					"Failed to write-lock {} array",
-					stringify!($variant)
-				));
+				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
+				let mut w = $array.write().expect(MSG);
 				Self::new(w.add(element) as u32)
 			}
 
 			fn remove(self) -> Result<$variant, IndexError> {
-				let mut w = $array.write().expect(&format!(
-					"Failed to write-lock {} array",
-					stringify!($variant)
-				));
+				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
+				let mut w = $array.write().expect(MSG);
 				if let Some(element) = w.remove(self.index() as usize) {
 					Ok(element)
 				} else {
