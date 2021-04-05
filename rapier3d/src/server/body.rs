@@ -645,6 +645,7 @@ fn set_space(body: Index, space: Option<Index>) {
 						let mut collider_handles = Vec::with_capacity(colliders.len());
 						let handle = space
 							.map_mut(|space| {
+								let mp = *b.mass_properties();
 								let handle = space.add_body(b);
 								for collider in colliders {
 									let handle = collider.map(|c| space.add_collider(c, handle));
@@ -655,6 +656,11 @@ fn set_space(body: Index, space: Option<Index>) {
 										godot_error!("Failed to add body exclusion");
 									}
 								}
+								space
+									.bodies_mut()
+									.get_mut(handle)
+									.unwrap()
+									.set_mass_properties(mp, false);
 								handle
 							})
 							.expect("Invalid space");
