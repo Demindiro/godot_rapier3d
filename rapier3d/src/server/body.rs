@@ -139,17 +139,6 @@ impl Body {
 		}
 	}
 
-	/// Store the given index in the userdata
-	fn set_index(&mut self, index: BodyIndex) {
-		if let Instance::Loose(body) = &mut self.body {
-			body.user_data &= !(u32::MAX as u128);
-			body.user_data |= index.index() as u128;
-		} else {
-			// Indices shouldn't be able to change after being attached
-			unreachable!();
-		}
-	}
-
 	fn add_shape(&mut self, index: ShapeIndex, transform: &Transform, enabled: bool) {
 		self.shapes.push(Shape {
 			index,
@@ -202,15 +191,16 @@ impl Body {
 		}
 	}
 
-	fn set_shape_userdata(collider: &mut Collider, body_index: BodyIndex, shape_index: u32) {
-		collider.user_data &= !(u64::MAX as u128);
-		collider.user_data |= (body_index.index() as u128) | ((shape_index as u128) << 32);
+	fn set_shape_userdata(collider: &mut Collider, body: BodyIndex, shape: u32) {
+		let body = body.index() as u128 | ((body.generation() as u128) << 32);
+		let shape = (shape as u128) << 64;
+		collider.user_data = body | shape;
 	}
 
 	pub fn get_shape_userdata(collider: &Collider) -> (BodyIndex, u32) {
-		let body = collider.user_data & (u32::MAX as u128);
-		let shape = (collider.user_data & ((u32::MAX as u128) << 32)) >> 32;
-		(BodyIndex::new(body as u32), shape as u32)
+		let body = collider.user_data as u64;
+		let shape = (collider.user_data >> 64) as u32;
+		(BodyIndex::new(body as u32, (body >> 32) as u16), shape)
 	}
 
 	pub fn object_id(&self) -> Option<ObjectID> {
@@ -244,9 +234,20 @@ impl Body {
 		colliders
 	}
 
+	/// Store the given index in the userdata
+	fn set_index(&mut self, index: BodyIndex) {
+		if let Instance::Loose(body) = &mut self.body {
+			body.user_data = index.index() as u128 | ((index.generation() as u128) << 32);
+		} else {
+			// Indices shouldn't be able to change after being attached
+			unreachable!();
+		}
+	}
+
 	/// Get the index from the given body's userdata
 	pub fn get_index(body: &RigidBody) -> BodyIndex {
-		BodyIndex::new((body.user_data & (u32::MAX as u128)) as u32)
+		let body = body.user_data as u64;
+		BodyIndex::new(body as u32, (body >> 32) as u16)
 	}
 
 	/// Frees this body, removing it from it's attached space (if any)

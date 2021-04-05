@@ -1,11 +1,11 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BodyIndex(u32);
+pub struct BodyIndex(u32, u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct JointIndex(u32);
+pub struct JointIndex(u32, u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ShapeIndex(u32);
+pub struct ShapeIndex(u32, u16);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SpaceIndex(u32);
+pub struct SpaceIndex(u32, u16);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Index {
@@ -20,49 +20,69 @@ pub struct InvalidIndex;
 
 impl BodyIndex {
 	/// Creates a new BodyIndex with the given Index
-	pub fn new(i: u32) -> Self {
-		Self(i)
+	pub fn new(i: u32, generation: u16) -> Self {
+		Self(i, generation)
 	}
 
 	/// Returns the inner index value
 	pub fn index(&self) -> u32 {
 		self.0
+	}
+
+	/// Returns the generation of this BodyIndex
+	pub fn generation(&self) -> u16 {
+		self.1
 	}
 }
 
 impl JointIndex {
 	/// Creates a new BodyIndex with the given Index
-	pub fn new(i: u32) -> Self {
-		Self(i)
+	pub fn new(i: u32, generation: u16) -> Self {
+		Self(i, generation)
 	}
 
 	/// Returns the inner index value
 	pub fn index(&self) -> u32 {
 		self.0
+	}
+
+	/// Returns the generation of this JointIndex
+	pub fn generation(&self) -> u16 {
+		self.1
 	}
 }
 
 impl ShapeIndex {
 	/// Creates a new BodyIndex with the given Index
-	pub fn new(i: u32) -> Self {
-		Self(i)
+	pub fn new(i: u32, generation: u16) -> Self {
+		Self(i, generation)
 	}
 
 	/// Returns the inner index value
 	pub fn index(&self) -> u32 {
 		self.0
+	}
+
+	/// Returns the generation of this ShapeIndex
+	pub fn generation(&self) -> u16 {
+		self.1
 	}
 }
 
 impl SpaceIndex {
 	/// Creates a new BodyIndex with the given Index
-	pub fn new(i: u32) -> Self {
-		Self(i)
+	pub fn new(i: u32, generation: u16) -> Self {
+		Self(i, generation)
 	}
 
 	/// Returns the inner index value
 	pub fn index(&self) -> u32 {
 		self.0
+	}
+
+	/// Returns the generation of this SpaceIndex
+	pub fn generation(&self) -> u16 {
+		self.1
 	}
 }
 
@@ -109,25 +129,26 @@ impl Index {
 
 	/// Converts an Index into an u64
 	pub fn raw(self) -> u64 {
-		let f = |a, i| ((a as u64) << 32) | i as u64;
+		let f = |a, i, gen| ((a as u64) << 48) | ((gen as u64) << 32) | i as u64;
 		match self {
 			// Reserve 0 for invalid indices
-			Self::Body(i) => f(1, i.index()),
-			Self::Joint(i) => f(2, i.index()),
-			Self::Shape(i) => f(3, i.index()),
-			Self::Space(i) => f(4, i.index()),
+			Self::Body(i) => f(1, i.index(), i.generation()),
+			Self::Joint(i) => f(2, i.index(), i.generation()),
+			Self::Shape(i) => f(3, i.index(), i.generation()),
+			Self::Space(i) => f(4, i.index(), i.generation()),
 		}
 	}
 
 	/// Converts an u64 to an Index. Returns an error if the index is not valid
 	pub fn from_raw(from: u64) -> Result<Self, InvalidIndex> {
 		let i = from as u32;
-		Ok(match from >> 32 {
+		let gen = (from >> 32) as u16;
+		Ok(match from >> 48 {
 			// Reserve 0 for invalid indices
-			1 => Self::Body(BodyIndex::new(i)),
-			2 => Self::Joint(JointIndex::new(i)),
-			3 => Self::Shape(ShapeIndex::new(i)),
-			4 => Self::Space(SpaceIndex::new(i)),
+			1 => Self::Body(BodyIndex::new(i, gen)),
+			2 => Self::Joint(JointIndex::new(i, gen)),
+			3 => Self::Shape(ShapeIndex::new(i, gen)),
+			4 => Self::Space(SpaceIndex::new(i, gen)),
 			_ => return Err(InvalidIndex),
 		})
 	}

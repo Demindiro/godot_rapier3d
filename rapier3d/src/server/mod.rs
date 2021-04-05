@@ -19,11 +19,16 @@ use shape::Shape;
 use std::sync::RwLock;
 
 lazy_static::lazy_static! {
-	static ref SPACE_INDICES: RwLock<SparseVec<Space>> = RwLock::new(SparseVec::new());
-	static ref BODY_INDICES: RwLock<SparseVec<Body>> = RwLock::new(SparseVec::new());
-	static ref JOINT_INDICES: RwLock<SparseVec<Joint>> = RwLock::new(SparseVec::new());
-	static ref SHAPE_INDICES: RwLock<SparseVec<Shape>> = RwLock::new(SparseVec::new());
+	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
+	static ref BODY_INDICES: RwLock<Indices<Body>> = RwLock::new(Indices::new());
+	static ref JOINT_INDICES: RwLock<Indices<Joint>> = RwLock::new(Indices::new());
+	static ref SHAPE_INDICES: RwLock<Indices<Shape>> = RwLock::new(Indices::new());
 	static ref ACTIVE: RwLock<bool> = RwLock::new(true);
+}
+
+struct Indices<T> {
+	elements: SparseVec<(T, u16)>,
+	generation: u16,
 }
 
 enum Instance<A, L> {
@@ -97,7 +102,7 @@ macro_rules! map_index {
 			{
 				const MSG: &str = concat!("Failed to read-lock ", stringify!($variant), " array");
 				let w = $array.read().expect(MSG);
-				if let Some(element) = w.get(self.index() as usize) {
+				if let Some(element) = w.get(self.index(), self.generation()) {
 					Ok(f(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -110,7 +115,7 @@ macro_rules! map_index {
 			{
 				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
 				let mut w = $array.write().expect(MSG);
-				if let Some(element) = w.get_mut(self.index() as usize) {
+				if let Some(element) = w.get_mut(self.index(), self.generation()) {
 					Ok(f(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -120,13 +125,14 @@ macro_rules! map_index {
 			fn add(element: $variant) -> Self {
 				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
 				let mut w = $array.write().expect(MSG);
-				Self::new(w.add(element) as u32)
+				let (i, g) = w.add(element);
+				Self::new(i, g)
 			}
 
 			fn remove(self) -> Result<$variant, IndexError> {
 				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
 				let mut w = $array.write().expect(MSG);
-				if let Some(element) = w.remove(self.index() as usize) {
+				if let Some(element) = w.remove(self.index(), self.generation()) {
 					Ok(element)
 				} else {
 					Err(IndexError::NoElement)
@@ -162,6 +168,53 @@ macro_rules! map_enum_index {
 			}
 		}
 	};
+}
+
+impl<T> Indices<T> {
+	fn new() -> Self {
+		Self {
+			elements: SparseVec::new(),
+			generation: 0,
+		}
+	}
+
+	fn add(&mut self, element: T) -> (u32, u16) {
+		let g = self.generation;
+		self.generation += 1;
+		let i = self.elements.add((element, g)) as u32;
+		(i, g)
+	}
+
+	fn remove(&mut self, index: u32, generation: u16) -> Option<T> {
+		if let Some((_, g)) = self.elements.get(index as usize) {
+			if *g == generation {
+				return self.elements.remove(index as usize).map(|v| v.0);
+			}
+		}
+		None
+	}
+
+	fn get(&self, index: u32, generation: u16) -> Option<&T> {
+		if let Some((e, g)) = self.elements.get(index as usize) {
+			if *g == generation {
+				return Some(e);
+			}
+		}
+		None
+	}
+
+	fn get_mut(&mut self, index: u32, generation: u16) -> Option<&mut T> {
+		if let Some((e, g)) = self.elements.get_mut(index as usize) {
+			if *g == generation {
+				return Some(e);
+			}
+		}
+		None
+	}
+
+	fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+		self.elements.iter_mut().map(|v| &mut v.0)
+	}
 }
 
 map_index!(BODY_INDICES, Body, BodyIndex,);
