@@ -652,9 +652,8 @@ fn set_space(body: Index, space: Option<Index>) {
 									collider_handles.push(handle);
 								}
 								for &exclude in body.exclusions.iter() {
-									if let Err(_) = space.add_body_exclusion(body_index, exclude) {
-										godot_error!("Failed to add body exclusion");
-									}
+									// "Adding" an exclusion multiple times is valid
+									let _ = space.add_body_exclusion(body_index, exclude);
 								}
 								space
 									.bodies_mut()
