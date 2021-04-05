@@ -6,7 +6,9 @@ use gdnative::{godot_error, godot_warn};
 use rapier3d::dynamics::{
 	ActivationStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
 };
-use rapier3d::geometry::{Collider, ColliderBuilder, ColliderHandle, InteractionGroups};
+use rapier3d::geometry::{
+	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
+};
 use rapier3d::math::Isometry;
 use rapier3d::na;
 use std::mem;
@@ -209,26 +211,40 @@ impl Body {
 		self.object_id
 	}
 
-	/// Creates colliders according to shape enable status and transform
-	fn create_colliders(&self, index: BodyIndex) -> Vec<Option<Collider>> {
-		let mut colliders = Vec::with_capacity(self.shapes.len());
-		for (i, shape) in self.shapes.iter().enumerate() {
+	/// Creates shapes according to shape enable status and transform
+	fn create_shapes(&self) -> Vec<Option<(SharedShape, &Isometry<f32>)>> {
+		let mut shapes = Vec::with_capacity(self.shapes.len());
+		for shape in self.shapes.iter() {
 			if shape.enabled {
 				let transform = shape.transform;
 				let shape_scale = transform.rotation * vec_gd_to_na(shape.scale);
 				let shape_scale = vec_gd_to_na(self.scale).component_mul(&shape_scale);
 				let shape_scale = vec_na_to_gd(shape_scale);
-				let result = shape.index.map(|shape| {
-					let mut collider = ColliderBuilder::new(shape.scaled(shape_scale))
-						.position_wrt_parent(transform)
-						.build();
-					Body::set_shape_userdata(&mut collider, index, i as u32);
-					colliders.push(Some(collider));
-				});
+				let result = shape
+					.index
+					.map(|s| shapes.push(Some((s.scaled(shape_scale), &shape.transform))));
 				if let Err(_) = result {
 					godot_error!("Shape is invalid: {:?}", shape.index);
-					colliders.push(None); // Make sure the collider count does still match
+					shapes.push(None); // Make sure the collider count does still match
 				}
+			} else {
+				shapes.push(None);
+			}
+		}
+		shapes
+	}
+
+	/// Creates colliders according to shape enable status and transform
+	fn create_colliders(&self, index: BodyIndex) -> Vec<Option<Collider>> {
+		let mut colliders = Vec::with_capacity(self.shapes.len());
+		for (i, e) in self.create_shapes().into_iter().enumerate() {
+			if let Some((shape, transform)) = e {
+				let mut collider = ColliderBuilder::new(shape)
+					.position_wrt_parent(*transform)
+					.collision_groups(self.collision_groups)
+					.build();
+				Body::set_shape_userdata(&mut collider, index, i as u32);
+				colliders.push(Some(collider));
 			} else {
 				colliders.push(None);
 			}
@@ -593,7 +609,7 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 		}
 	};
 
-	map_or_err!(body, map_body_mut, |body, body_index| {
+	map_or_err!(body, map_body_mut, |body, _| {
 		let mut scale = body.scale;
 		let mut scale_changed = false;
 		match State::new(state, value) {
@@ -628,30 +644,33 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 			Err(e) => godot_error!("Invalid state: {:?}", e),
 		}
 
-		// Recreating colliders is potentially very expensive, so avoid it when possible
+		// Scaling shapes is potentially very expensive, so avoid it when possible
 		// is_equal_approx (not implemented yet) should be close enough
-		// FIXME `set_shape` exists since 0.7, use that instead of the current remove/read thing.
-		// FIXME temporarily disabled due to https://github.com/dimforge/rapier/issues/163
 		if scale_changed {
-			body.recalculate_inertia();
-			let colliders = body.create_colliders(body_index);
-			if let Instance::Attached((rb, _), space) = &mut body.body {
+			let shapes = body
+				.create_shapes()
+				.into_iter()
+				.map(|v| v.map(|v| v.0))
+				.collect::<Vec<_>>();
+			if let Instance::Attached((_, colliders), space) = &mut body.body {
 				space
 					.map_mut(|space| {
-						// Removing the body also removes all of it's colliders
-						// FIXME this also removes all joints, so those need to be recreated
-						let rigid = space.remove_body(*rb).expect("Invalid body");
-						*rb = space.add_body(rigid);
-						let mut collider_handles = Vec::with_capacity(colliders.len());
-						for collider in colliders {
-							let handle = collider.map(|c| space.add_collider(c, *rb));
-							collider_handles.push(handle);
+						let iter = colliders.iter().zip(shapes.into_iter());
+						for (&handle, shape) in iter {
+							if let Some(handle) = handle {
+								space
+									.colliders_mut()
+									.get_mut(handle)
+									.expect("Invalid collider handle")
+									.set_shape(shape.expect("No shape"));
+							}
 						}
 					})
 					.expect("Invalid space");
 			} else {
 				unreachable!();
 			}
+			body.recalculate_inertia();
 		}
 	});
 }
