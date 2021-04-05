@@ -70,6 +70,8 @@ pub struct Body {
 	scale: Vector3,
 	exclusions: Vec<BodyIndex>,
 	collision_groups: InteractionGroups,
+	restitution: f32,
+	friction: f32,
 }
 
 impl Type {
@@ -143,6 +145,8 @@ impl Body {
 			scale: Vector3::one(),
 			exclusions: Vec::new(),
 			collision_groups: InteractionGroups::default(),
+			restitution: 0.0,
+			friction: 0.0,
 		}
 	}
 
@@ -264,6 +268,8 @@ impl Body {
 				let mut collider = ColliderBuilder::new(shape)
 					.position_wrt_parent(*transform)
 					.collision_groups(self.collision_groups)
+					.restitution(self.restitution)
+					.friction(self.friction)
 					.build();
 				Body::set_shape_userdata(&mut collider, index, i as u32);
 				colliders.push(Some(collider));
@@ -471,24 +477,54 @@ fn set_param(body: Index, param: i32, value: f32) {
 		}
 		Param::LinearDamp(damp) => body.linear_damping = damp,
 		Param::AngularDamp(damp) => body.angular_damping = damp,
-		Param::Bounce(_bounce) => godot_error!("TODO bounce"),
-		Param::Friction(_friction) => godot_error!("TODO friction"),
+		Param::Bounce(_) | Param::Friction(_) => (),
 		Param::GravityScale(scale) => body.set_gravity_scale(scale, true),
 	};
 	map_or_err!(body, map_body_mut, |body, _| {
+		match param {
+			Param::Bounce(bounce) => body.restitution = bounce,
+			Param::Friction(friction) => body.friction = friction,
+			_ => (),
+		}
 		match &mut body.body {
-			Instance::Attached((body, _), space) => {
+			Instance::Attached((rb, _), space) => {
 				space
 					.map_mut(|space| {
-						f(space
+						let rb = space
 							.bodies_mut()
-							.get_mut(*body)
-							.expect("Invalid body handle"))
+							.get_mut(*rb)
+							.expect("Invalid body handle");
+						f(rb);
+						match param {
+							Param::Bounce(bounce) => {
+								let colliders =
+									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								for c in colliders.into_iter() {
+									let c = space
+										.colliders_mut()
+										.get_mut(c)
+										.expect("Invalid collider handle");
+									c.restitution = bounce;
+								}
+							}
+							Param::Friction(friction) => {
+								let colliders =
+									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								for c in colliders.into_iter() {
+									let c = space
+										.colliders_mut()
+										.get_mut(c)
+										.expect("Invalid collider handle");
+									c.friction = friction;
+								}
+							}
+							_ => (),
+						}
 					})
 					.expect("Invalid space handle");
 			}
-			Instance::Loose(body) => {
-				f(body);
+			Instance::Loose(rb) => {
+				f(rb);
 			}
 		}
 		body.recalculate_inertia();
