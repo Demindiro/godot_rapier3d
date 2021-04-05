@@ -72,6 +72,7 @@ pub struct Body {
 	collision_groups: InteractionGroups,
 	restitution: f32,
 	friction: f32,
+	omit_force_integration: bool,
 }
 
 impl Type {
@@ -147,6 +148,7 @@ impl Body {
 			collision_groups: InteractionGroups::default(),
 			restitution: 0.0,
 			friction: 0.0,
+			omit_force_integration: false,
 		}
 	}
 
@@ -320,6 +322,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_set_collision_layer(set_collision_layer);
 	ffi.body_set_collision_mask(set_collision_mask);
 	ffi.body_set_mode(set_mode);
+	ffi.body_set_omit_force_integration(set_omit_force_integration);
 	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
@@ -611,6 +614,25 @@ fn set_mode(body: Index, mode: i32) {
 		}
 		Err(_) => godot_error!("Invalid mode"),
 	}
+}
+
+fn set_omit_force_integration(body: Index, enable: bool) {
+	map_or_err!(body, map_body_mut, |body, _| {
+		if body.omit_force_integration != enable {
+			body.omit_force_integration = enable;
+			let g_scale = if enable { 0.0 } else { 1.0 };
+			match &mut body.body {
+				Instance::Attached((rb, _), space) => {
+					space.map_mut(|space| {
+						space.bodies_mut().get_mut(*rb).expect("Invalid body handle").set_gravity_scale(g_scale, true);
+					}).expect("Invalid space");
+				}
+				Instance::Loose(body) => {
+					body.set_gravity_scale(g_scale, true);
+				}
+			}
+		}
+	});
 }
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
