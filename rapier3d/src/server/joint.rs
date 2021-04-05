@@ -8,6 +8,7 @@ use rapier3d::na::Unit;
 
 pub struct Joint {
 	joint: Instance<JointHandle, LooseJoint>,
+	exclude_bodies: bool,
 }
 
 struct LooseJoint {
@@ -68,6 +69,7 @@ impl Joint {
 		if let Ok(Ok(Some((joint, space)))) = result {
 			Self {
 				joint: Instance::Attached(joint, space),
+				exclude_bodies: false,
 			}
 		} else {
 			Self {
@@ -76,6 +78,7 @@ impl Joint {
 					body_a,
 					body_b,
 				}),
+				exclude_bodies: false,
 			}
 		}
 	}
@@ -121,6 +124,7 @@ impl HingeFlag {
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi.joint_create_hinge(create_hinge);
+	ffi.joint_disable_collisions_between_bodies(disable_collisions_between_bodies);
 	ffi.hinge_joint_set_flag(set_hinge_flag);
 	ffi.hinge_joint_set_param(set_hinge_param);
 }
@@ -176,6 +180,38 @@ fn create_hinge(
 	Some(Index::Joint(JointIndex::add(Joint::new(
 		joint, body_a, body_b,
 	))))
+}
+
+fn disable_collisions_between_bodies(joint: Index, disable: bool) {
+	let enable = !disable;
+	map_or_err!(joint, map_joint_mut, |joint, _| {
+		if joint.exclude_bodies != enable {
+			joint.exclude_bodies = enable;
+			if let Instance::Attached(joint, space) = joint.joint {
+				map_or_err!(space, map_mut, |space| {
+					let joint = space.joints().get(joint).expect("Invalid joint");
+					// FIXME this can (and will) panic if a body is freed. Check again later
+					// for the cleanest way to handle this (should the joint be freed?)
+					let a = space.bodies().get(joint.body1).expect("Invalid body A");
+					let b = space.bodies().get(joint.body2).expect("Invalid body B");
+					let a = Body::get_index(a);
+					let b = Body::get_index(b);
+					let result = if enable {
+						space.add_body_exclusion(a, b)
+					} else {
+						space.remove_body_exclusion(a, b)
+					};
+					if let Err(e) = result {
+						if enable {
+							godot_error!("Failed to add bodies: {:?}", e);
+						} else {
+							godot_error!("Failed to remove bodies: {:?}", e);
+						}
+					}
+				});
+			}
+		}
+	});
 }
 
 fn set_hinge_flag(joint: Index, flag: i32, value: bool) {
