@@ -505,15 +505,17 @@ fn set_space(body: Index, space: Option<Index>) {
 		}
 	} else {
 		// FIXME remove exceptions
-		map_or_err!(body, map_body_mut, |body, _| match body.body {
-			Instance::Attached((body, _), space) => {
-				space
-					.map_mut(|space| {
-						space.remove_body(body);
-					})
-					.expect("Failed to modify space");
-			}
-			Instance::Loose(_) => todo!(),
+		map_or_err!(body, map_body_mut, |body, _| {
+			let rb = match body.body {
+				Instance::Attached((body, _), space) => {
+					space
+						.map_mut(|space| space.remove_body(body))
+						.expect("Failed to modify space")
+						.expect("Invalid body handle")
+				}
+				Instance::Loose(_) => todo!(),
+			};
+			body.body = Instance::Loose(rb);
 		});
 	}
 }
