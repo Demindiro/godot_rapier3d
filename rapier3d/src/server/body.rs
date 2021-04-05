@@ -2,11 +2,11 @@ use super::index::BodyIndex;
 use super::*;
 use crate::util::*;
 use gdnative::core_types::*;
-use gdnative::godot_error;
+use gdnative::{godot_error, godot_warn};
 use rapier3d::dynamics::{
 	ActivationStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
 };
-use rapier3d::geometry::{Collider, ColliderBuilder, ColliderHandle};
+use rapier3d::geometry::{Collider, ColliderBuilder, ColliderHandle, InteractionGroups};
 use rapier3d::math::Isometry;
 use rapier3d::na;
 use std::mem;
@@ -57,6 +57,7 @@ pub struct Body {
 	shapes: Vec<Shape>,
 	scale: Vector3,
 	exclusions: Vec<BodyIndex>,
+	collision_groups: InteractionGroups,
 }
 
 impl Type {
@@ -117,6 +118,7 @@ impl Body {
 			shapes: Vec::new(),
 			scale: Vector3::one(),
 			exclusions: Vec::new(),
+			collision_groups: InteractionGroups::default(),
 		}
 	}
 
@@ -271,6 +273,8 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_create(create);
 	ffi.body_get_direct_state(get_direct_state);
 	ffi.body_remove_shape(remove_shape);
+	ffi.body_set_collision_layer(set_collision_layer);
+	ffi.body_set_collision_mask(set_collision_mask);
 	ffi.body_set_param(set_param);
 	ffi.body_set_shape_transform(set_shape_transform);
 	ffi.body_set_shape_disabled(set_shape_disabled);
@@ -452,6 +456,54 @@ fn set_param(body: Index, param: i32, value: f32) {
 	});
 }
 
+fn set_collision_layer(body: Index, layer: u32) {
+	// Check if bits 16-20 are intentionally toggled by the user
+	if ((layer >> 16) & 0xf) != 0 && ((layer >> 16) & 0xf) != 0xf {
+		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
+	}
+	map_or_err!(body, map_body_mut, |body, _| {
+		body.collision_groups.with_groups(layer as u16);
+		let cg = body.collision_groups;
+		if let Instance::Attached((_, ch), space) = &mut body.body {
+			space
+				.map_mut(|space| {
+					for ch in ch.iter().filter_map(Option::as_ref) {
+						space
+							.colliders_mut()
+							.get_mut(*ch)
+							.expect("Invalid collider")
+							.set_collision_groups(cg);
+					}
+				})
+				.expect("Invalid space");
+		}
+	});
+}
+
+fn set_collision_mask(body: Index, mask: u32) {
+	// Check if bits 16-20 are intentionally toggled by the user
+	if ((mask >> 16) & 0xf) != 0 && ((mask >> 16) & 0xf) != 0xf {
+		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
+	}
+	map_or_err!(body, map_body_mut, |body, _| {
+		body.collision_groups.with_mask(mask as u16);
+		let cg = body.collision_groups;
+		if let Instance::Attached((_, ch), space) = &mut body.body {
+			space
+				.map_mut(|space| {
+					for ch in ch.iter().filter_map(Option::as_ref) {
+						space
+							.colliders_mut()
+							.get_mut(*ch)
+							.expect("Invalid collider")
+							.set_collision_groups(cg);
+					}
+				})
+				.expect("Invalid space");
+		}
+	});
+}
+
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |v, _| v.map_shape_mut(shape, |v| (
@@ -506,12 +558,10 @@ fn set_space(body: Index, space: Option<Index>) {
 		// FIXME remove exceptions
 		map_or_err!(body, map_body_mut, |body, _| {
 			let rb = match body.body {
-				Instance::Attached((body, _), space) => {
-					space
-						.map_mut(|space| space.remove_body(body))
-						.expect("Failed to modify space")
-						.expect("Invalid body handle")
-				}
+				Instance::Attached((body, _), space) => space
+					.map_mut(|space| space.remove_body(body))
+					.expect("Failed to modify space")
+					.expect("Invalid body handle"),
 				Instance::Loose(_) => todo!(),
 			};
 			body.body = Instance::Loose(rb);
