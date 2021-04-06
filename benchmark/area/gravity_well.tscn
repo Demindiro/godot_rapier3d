@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://benchmark/bodies/ball.tscn" type="PackedScene" id=1]
+[ext_resource path="res://benchmark/area/anti_gravity.gd" type="Script" id=2]
+[ext_resource path="res://benchmark/stats.tscn" type="PackedScene" id=3]
+
+[sub_resource type="SphereShape" id=1]
+radius = 73.0
+
+[node name="Node" type="Node"]
+script = ExtResource( 2 )
+ball = ExtResource( 1 )
+start = Vector3( -25, 20, -25 )
+distance = Vector3( 1.25, 0, 1.25 )
+count_x = 40
+count_y = 40
+
+[node name="Area" type="Area" parent="."]
+space_override = 3
+gravity_point = true
+gravity_vec = Vector3( 0, 0, 0 )
+gravity = 98.0
+
+[node name="CollisionShape" type="CollisionShape" parent="Area"]
+shape = SubResource( 1 )
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 32, 46 )
+
+[node name="Stats" parent="." instance=ExtResource( 3 )]

@@ -1,37 +1,53 @@
+use crate::area::Area;
 use crate::server;
-use crate::server::{BodyIndex, SpaceIndex};
+use crate::server::Body;
+use crate::server::{AreaIndex, BodyIndex, MapIndex, SpaceIndex};
 use crate::util::*;
 use gdnative::prelude::*;
+use rapier3d::crossbeam::channel::{self, Receiver};
 use rapier3d::dynamics::{
 	CCDSolver, IntegrationParameters, Joint, JointHandle, JointParams, JointSet, RigidBody,
 	RigidBodyHandle, RigidBodySet,
 };
 use rapier3d::geometry::{
-	BroadPhase, Collider, ColliderHandle, ColliderSet, InteractionGroups, NarrowPhase, Ray,
-	SolverFlags,
+	BroadPhase, Collider, ColliderHandle, ColliderSet, ContactEvent, InteractionGroups,
+	IntersectionEvent, NarrowPhase, Ray, SolverFlags,
 };
 use rapier3d::na::Point3;
 use rapier3d::pipeline::{
-	ContactModificationContext, PairFilterContext, PhysicsHooks, PhysicsHooksFlags,
-	PhysicsPipeline, QueryPipeline,
+	ChannelEventCollector, ContactModificationContext, PairFilterContext, PhysicsHooks,
+	PhysicsHooksFlags, PhysicsPipeline, QueryPipeline,
 };
+use std::collections::BTreeMap;
 
 pub struct Space {
+	pub enabled: bool,
+
 	physics_pipeline: PhysicsPipeline,
 	query_pipeline: QueryPipeline,
+	query_pipeline_out_of_date: bool,
+
 	gravity: Vector3,
 	integration_parameters: IntegrationParameters,
+	default_linear_damp: f32,
+	default_angular_damp: f32,
 	broad_phase: BroadPhase,
 	narrow_phase: NarrowPhase,
+
 	bodies: RigidBodySet,
 	colliders: ColliderSet,
 	joints: JointSet,
+
 	ccd_solver: CCDSolver,
+
 	body_exclusions: BodyExclusionHooks,
-	event_handler: (),
-	query_pipeline_out_of_date: bool,
+	event_handler: ChannelEventCollector,
+	contact_recv: Receiver<ContactEvent>,
+	intersection_recv: Receiver<IntersectionEvent>,
+
+	area_map: BTreeMap<i32, Vec<RigidBodyHandle>>,
+
 	index: Option<SpaceIndex>,
-	pub enabled: bool,
 }
 
 pub struct RayCastResult {
@@ -50,6 +66,8 @@ struct BodyExclusionHooks {
 
 impl Space {
 	pub fn new() -> Self {
+		let (contact_send, contact_recv) = channel::unbounded();
+		let (intersection_send, intersection_recv) = channel::unbounded();
 		Space {
 			physics_pipeline: PhysicsPipeline::new(),
 			query_pipeline: QueryPipeline::new(),
@@ -62,10 +80,17 @@ impl Space {
 			joints: JointSet::new(),
 			ccd_solver: CCDSolver::new(),
 			body_exclusions: BodyExclusionHooks::new(),
-			event_handler: (),
+			event_handler: ChannelEventCollector::new(intersection_send, contact_send),
+			intersection_recv,
+			contact_recv,
 			query_pipeline_out_of_date: false,
 			index: None,
 			enabled: true,
+
+			area_map: BTreeMap::new(),
+
+			default_linear_damp: 0.0,
+			default_angular_damp: 0.0,
 		}
 	}
 
@@ -84,6 +109,103 @@ impl Space {
 			&self.event_handler,
 		);
 		self.query_pipeline_out_of_date = true;
+
+		let mut areas = AreaIndex::write_all();
+		let mut bodies = BodyIndex::write_all();
+
+		// Clear area events
+		let mut remove = Vec::new();
+		for (&prio, vec) in self.area_map.iter() {
+			let mut rm = Vec::new();
+			for (i, &area) in vec.iter().enumerate() {
+				if let Some(area) = self.bodies.get(area) {
+					let area = Area::get_rigidbody_userdata(area).expect("Invalid area userdata");
+					let area = areas
+						.get_mut(area.index(), area.generation())
+						.expect("Invalid area index");
+					area.clear_events();
+				} else {
+					// u32 is slightly more efficient and cannot be exceeded anyways, as AreaIndex
+					// also uses u32.
+					rm.push(i as u32);
+				}
+			}
+			if rm.len() > 0 {
+				remove.push((prio, rm));
+			}
+		}
+
+		// Remove stale areas
+		for (p, rm) in remove.into_iter() {
+			let v = self.area_map.get_mut(&p).unwrap();
+			for i in rm.into_iter().rev() {
+				v.swap_remove(i as usize);
+			}
+			if v.len() == 0 {
+				self.area_map.remove(&p);
+			}
+		}
+
+		// Process area intersections
+		while let Ok(event) = self.intersection_recv.try_recv() {
+			let a = &self.colliders[event.collider1];
+			let b = &self.colliders[event.collider2];
+			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
+				if let Some(b) = Area::get_collider_userdata(b) {
+					let (area_a, area_b) = areas.get_mut2(a.index(), a.generation(), b.index(), b.generation());
+					let area_a = area_a.expect("Invalid area A index");
+					let area_b = area_b.expect("Invalid area B index");
+					if area_b.monitorable() {
+						area_a.push_area_event(b, event.intersecting);
+					}
+					if area_a.monitorable() {
+						area_b.push_area_event(a, event.intersecting);
+					}
+					continue;
+				} else {
+					(a, Body::get_shape_userdata(&b).0)
+				}
+			} else if let Some(b) = Area::get_collider_userdata(b) {
+				(b, Body::get_shape_userdata(&a).0)
+			} else {
+				// I suppose it makes sense to avoid poisoning the locks?
+				drop(areas);
+				drop(bodies);
+				panic!("Neither collider is an area");
+			};
+			let area = areas
+				.get_mut(area.index(), area.generation())
+				.expect("Invalid area index");
+			area.push_body_event(body, event.intersecting);
+		}
+
+		// Process body contacts (TODO)
+		while let Ok(_) = self.contact_recv.try_recv() {}
+
+		// Register area space overrides to bodies
+		for &area in self.area_map.values().rev().flat_map(|v| v.iter()) {
+			let rb = &self.bodies[area];
+			let area = Area::get_rigidbody_userdata(rb).expect("Area body has invalid userdata");
+			let area = areas
+				.get_mut(area.index(), area.generation())
+				.expect("Invalid area index");
+			area.apply_events(&rb, &mut bodies, &self.bodies);
+		}
+
+		// Apply space overrides to bodies
+		//for rb in self.bodies.iter_mut().map(|v| v.1) {
+		for (_, rb) in self.bodies.iter_mut() {
+			// FIXME *puke*
+			if let Some(_) = Area::get_rigidbody_userdata(rb) {
+				// *gag*
+			} else {
+				let body = Body::get_index(rb);
+				let body = bodies
+					.get_mut(body.index(), body.generation())
+					.expect("Invalid body index");
+				body.apply_area_overrides(rb, self.default_linear_damp, self.default_angular_damp);
+			}
+		}
 	}
 
 	/// Gets the index of this space
@@ -241,6 +363,46 @@ impl Space {
 				shape,
 			}
 		})
+	}
+
+	/// Returns the gravity vector of this space
+	pub fn gravity(&self) -> Vector3 {
+		self.gravity
+	}
+
+	/// Sets the gravity vector of this space
+	pub fn set_gravity(&mut self, gravity: Vector3) {
+		self.gravity = gravity;
+	}
+
+	/// Sets the default linear damp of rigid bodies in this space
+	pub fn set_default_linear_damp(&mut self, damp: f32) {
+		self.default_linear_damp = damp;
+	}
+
+	/// Sets the default angular damp of rigid bodies in this space
+	pub fn set_default_angular_damp(&mut self, damp: f32) {
+		self.default_angular_damp = damp;
+	}
+
+	/// Registers an area if needed and stores the priority of said area
+	/// [`RigidBodyHandle`]s are used as those can be used directly to check if
+	/// the area is still present in this space.
+	pub fn set_area_priority(&mut self, area: RigidBodyHandle, priority: i32) {
+		// FIXME move userdata code to area.rs, this may be overwritten by accident in the future
+		let rb = self.bodies.get_mut(area).expect("Invalid handle");
+		let prio = (rb.user_data >> 96) as i32;
+		self.area_map.get_mut(&prio).map(|v| {
+			if let Some(i) = v.iter().position(|e| *e == area) {
+				v.remove(i);
+			}
+		});
+
+		rb.user_data |= (priority as u32 as u128) << 96;
+		self.area_map
+			.entry(priority)
+			.or_insert(Vec::new())
+			.push(area);
 	}
 }
 

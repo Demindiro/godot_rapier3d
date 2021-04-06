@@ -8,6 +8,7 @@
 #include "core/rid.h"
 #include "core/hash_map.h"
 #include "core/resource.h"
+#include "core/vector.h"
 #include "servers/physics_server.h"
 #include "body_state.h"
 #include "space_state.h"
@@ -32,21 +33,37 @@ class PluggablePhysicsServer : public PhysicsServer {
 	GDCLASS(PluggablePhysicsServer, PhysicsServer);
 
 	struct Callback {
-		Object *object;
+		ObjectID object_id;
 		StringName method;
 		Variant userdata;
 
 		// HashMap needs this for whatever reason
 		Callback() {
-			this->object = nullptr;
+			this->object_id = 0;
 			this->method = "";
 			this->userdata = Variant();
 		}
 
 		Callback(Object *p_object, StringName p_method, Variant p_userdata) {
-			this->object = p_object;
+			this->object_id = p_object != nullptr ? p_object->get_instance_id() : 0;
 			this->method = p_method;
 			this->userdata = p_userdata;
+		}
+	};
+
+	struct AreaCallback {
+		ObjectID object_id;
+		StringName method;
+
+		// HashMap needs this for whatever reason
+		AreaCallback() {
+			this->object_id = 0;
+			this->method = "";
+		}
+
+		AreaCallback(Object *p_object, StringName p_method) {
+			this->object_id = p_object != nullptr ? p_object->get_instance_id() : 0;
+			this->method = p_method;
 		}
 	};
 
@@ -58,7 +75,9 @@ class PluggablePhysicsServer : public PhysicsServer {
 
 	mutable RID_Owner<PluggablePhysicsRID_Data> rids;
 	HashMap<index_t, RID> reverse_rids;
-	HashMap<index_t, Callback> callbacks;
+	HashMap<index_t, Callback> body_force_integration_callbacks;
+	HashMap<index_t, AreaCallback> area_body_monitor_callbacks;
+	HashMap<index_t, AreaCallback> area_area_monitor_callbacks;
 
 	friend class PluggablePhysicsDirectBodyState;
 	friend class PluggablePhysicsDirectSpaceState;

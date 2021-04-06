@@ -24,12 +24,18 @@ void PluggablePhysicsServer::_bind_methods() {
 
 }
 
-void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* object, const StringName &method) {
-	ERR_FAIL_MSG("TODO");
+void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* receiver, const StringName &method) {
+	index_t id = this->get_index(area);
+	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
+	AreaCallback callback(receiver, method);
+	this->area_body_monitor_callbacks.set(id, callback);
 }
 
-void PluggablePhysicsServer::area_set_area_monitor_callback(RID area, Object* object, const StringName &method) {
-	ERR_FAIL_MSG("TODO");
+void PluggablePhysicsServer::area_set_area_monitor_callback(RID area, Object* receiver, const StringName &method) {
+	index_t id = this->get_index(area);
+	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
+	AreaCallback callback(receiver, method);
+	this->area_area_monitor_callbacks.set(id, callback);
 }
 
 void PluggablePhysicsServer::body_get_collision_exceptions(RID body, List<RID> *list) {
@@ -61,43 +67,113 @@ void PluggablePhysicsServer::init() {
 
 void PluggablePhysicsServer::step(float delta) {
 
-	ERR_FAIL_COND_MSG(this->fn_table.step == nullptr, "Not implemented");
-	(*this->fn_table.step)(delta);
-
-	ERR_FAIL_COND_MSG(this->fn_table.body_get_direct_state == nullptr, "Not implemented");
+	EXEC_FFI_FN(this, step, delta);
 
 	const index_t *id = nullptr;
-	while ((id = this->callbacks.next(id)) != nullptr) {
+	Vector<index_t> invalid_callbacks;
+
+	// Execute force integration callbacks
+	ERR_FAIL_COND_MSG(this->fn_table.body_get_direct_state == nullptr, "Not implemented");
+	while ((id = this->body_force_integration_callbacks.next(id)) != nullptr) {
 
 		(*this->fn_table.body_get_direct_state)(*id, &this->body_state_singleton->state);
 
 		this->body_state_singleton->delta = delta;
 		this->body_state_singleton->body = *id;
 
-		// I'd like to note just how much I hate C++
-		// I was stuck on this not working for two hours or so
-		// Then I added some code below (now commented) to see why the hell shit isn't getting called
-		// Turns out there was an error, namely '2' AKA 'CALL_ERROR_INVALID_ARGUMENT'
-		// This was because I changed 'PhysicsDirectBodyState body_state_singleton' to 'PhysicsDirectBodyState *body_state_singleton'
-		// The line below used to be '... = &this->body_state_singleton'
-		// Not a single warning, error or whatever. Nada
-		// Why
-		Variant variant_body_direct = this->body_state_singleton;
+		Callback *callback = this->body_force_integration_callbacks.getptr(*id);
+		Object *object = ObjectDB::get_instance(callback->object_id);
 
-		Callback *callback = this->callbacks.getptr(*id);
-		const Variant *argv[2] = { &variant_body_direct, &callback->userdata };
-		int argc = (callback->userdata.get_type() == Variant::NIL) ? 1 : 2;
+		if (object == nullptr) {
+			invalid_callbacks.push_back(*id);
+		} else {
+			Variant variant_body_direct = this->body_state_singleton;
+			const Variant *argv[2] = { &variant_body_direct, &callback->userdata };
+			int argc = (callback->userdata.get_type() == Variant::NIL) ? 1 : 2;
 
-		Variant::CallError error = {};
-		//printf("%S -> %S (%d)\n", callback->object->get_class().ptr(), String(callback->method).ptr(), argc);
-		callback->object->call(callback->method, argv, argc, error);
-		//printf("%u\n", *(uint32_t *)&error);
+			Variant::CallError error = {};
+			object->call(callback->method, argv, argc, error);
+		}
+	}
+
+	// Remove any invalid callbacks
+	for (int i = 0; i < invalid_callbacks.size(); i++) {
+		this->body_force_integration_callbacks.erase(invalid_callbacks[i]);
+	}
+	invalid_callbacks.resize(0);
+
+	// Execute area <-> body monitor callbacks
+	ERR_FAIL_COND_MSG(this->fn_table.area_get_body_event == nullptr, "Not implemented");
+	while ((id = this->area_body_monitor_callbacks.next(id)) != nullptr) {
+		
+		struct physics_area_monitor_event event;
+
+		AreaCallback *callback = this->area_body_monitor_callbacks.getptr(*id);
+		Object *object = ObjectDB::get_instance(callback->object_id);
+
+		if (object == nullptr) {
+			invalid_callbacks.push_back(*id);
+		} else {
+			while ((*this->fn_table.area_get_body_event)(*id, &event)) {
+				Variant event_type = event.added ? 0 : 1;
+				Variant rid = this->reverse_rids.get(event.id);
+				Variant object_id = event.object_id;
+				// Bullets skip this, so shall we I suppose (less work for me)
+				Variant body_shape = 0;
+				Variant area_shape = 0;
+
+				const Variant *argv[5] = { &event_type, &rid, &object_id, &body_shape, &area_shape };
+
+				Variant::CallError error = {};
+				object->call(callback->method, argv, 5, error);
+			}
+		}
+	}
+
+	// Remove any invalid callbacks
+	for (int i = 0; i < invalid_callbacks.size(); i++) {
+		this->area_body_monitor_callbacks.erase(invalid_callbacks[i]);
+	}
+	invalid_callbacks.resize(0);
+
+	// Execute area <-> area monitor callbacks
+	ERR_FAIL_COND_MSG(this->fn_table.area_get_area_event == nullptr, "Not implemented");
+	while ((id = this->area_area_monitor_callbacks.next(id)) != nullptr) {
+		
+		struct physics_area_monitor_event event;
+
+		AreaCallback *callback = this->area_area_monitor_callbacks.getptr(*id);
+		Object *object = ObjectDB::get_instance(callback->object_id);
+
+		if (object == nullptr) {
+			invalid_callbacks.push_back(*id);
+		} else {
+			while ((*this->fn_table.area_get_area_event)(*id, &event)) {
+				Variant event_type = event.added ? 0 : 1;
+				Variant rid = this->reverse_rids.get(event.id);
+				Variant object_id = event.object_id;
+				// Bullets skips this, so shall we I suppose (less work for me)
+				Variant body_shape = 0;
+				Variant area_shape = 0;
+
+				const Variant *argv[5] = { &event_type, &rid, &object_id, &body_shape, &area_shape };
+
+				Variant::CallError error = {};
+				object->call(callback->method, argv, 5, error);
+			}
+		}
+	}
+
+	// Remove any invalid callbacks
+	for (int i = 0; i < invalid_callbacks.size(); i++) {
+		this->area_body_monitor_callbacks.erase(invalid_callbacks[i]);
 	}
 }
 
 PhysicsDirectBodyState *PluggablePhysicsServer::body_get_direct_state(RID rid) {
 	ERR_FAIL_COND_V_MSG(this->fn_table.body_get_direct_state == nullptr, nullptr, "Not implemented");
 	index_t id = this->get_index(rid);
+	ERR_FAIL_COND_V_MSG(id == 0, nullptr, "Invalid RID");
 	(*this->fn_table.body_get_direct_state)(id, &this->body_state_singleton->state);
 	return this->body_state_singleton;
 }
@@ -105,7 +181,7 @@ PhysicsDirectBodyState *PluggablePhysicsServer::body_get_direct_state(RID rid) {
 void PluggablePhysicsServer::body_set_force_integration_callback(RID body, Object *receiver, const StringName &method, const Variant &userdata) {
 	index_t id = this->get_index(body);
 	Callback callback(receiver, method, userdata);
-	this->callbacks.set(id, callback);
+	this->body_force_integration_callbacks.set(id, callback);
 }
 
 void PluggablePhysicsServer::free(RID rid) {
@@ -114,7 +190,9 @@ void PluggablePhysicsServer::free(RID rid) {
 	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
 	this->rids.free(rid);
 	this->reverse_rids.erase(id);
-	this->callbacks.erase(id);
+	this->body_force_integration_callbacks.erase(id);
+	this->area_body_monitor_callbacks.erase(id);
+	this->area_area_monitor_callbacks.erase(id);
 	(*this->fn_table.free)(id);
 }
 

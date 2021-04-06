@@ -3,7 +3,9 @@
 [ext_resource path="res://benchmark/stats.tscn" type="PackedScene" id=1]
 [ext_resource path="res://benchmark/environment.tscn" type="PackedScene" id=2]
 [ext_resource path="res://benchmark/boxes/boxes.gd" type="Script" id=5]
-[ext_resource path="res://benchmark/boxes/box_godot.tscn" type="PackedScene" id=6]
+[ext_resource path="res://benchmark/bodies/box.tscn" type="PackedScene" id=6]
+
+
 
 [node name="Node" type="Node"]
 script = ExtResource( 5 )

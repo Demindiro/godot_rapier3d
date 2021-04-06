@@ -22,7 +22,7 @@ fn main() {
 
 	let out = PathBuf::from(env::var("OUT_DIR").unwrap()).join("ffi.rs");
 	let mut out = File::create(out).expect("Failed to create bindings");
-	out.write(bindings.to_string().as_bytes())
+	out.write_all(bindings.to_string().as_bytes())
 		.expect("Failed to write bindings!");
 }
 
@@ -36,7 +36,7 @@ fn generate_struct(api: &json::JsonValue) -> TokenStream {
 		let mut args_safe = TokenStream::new();
 		for a in info["arguments"].members() {
 			let name = a["name"].as_str().unwrap();
-			assert_eq!(name.find("*"), None, "Method name: \"{}\"", name);
+			assert_eq!(name.find('*'), None, "Method name: \"{}\"", name);
 			let name: TokenStream = name.parse().unwrap();
 			args_unsafe.extend(name.clone());
 			args_unsafe.extend(quote!(:));
@@ -86,7 +86,7 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 		for a in info["arguments"].members() {
 			let name = a["name"].as_str().unwrap();
 			let typ = a["type"].as_str().unwrap();
-			assert_eq!(name.find("*"), None, "Method name: \"{}\"", name);
+			assert_eq!(name.find('*'), None, "Method name: \"{}\"", name);
 			let name: TokenStream = name.parse().unwrap();
 			params.extend(name.clone());
 			params.extend(quote!(:));
@@ -143,8 +143,6 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 	}
 	quote! {
 		use std::sync::RwLock;
-		use gdnative::prelude::*;
-		use core::ptr;
 
 		lazy_static::lazy_static! {
 			static ref WRAPPERS: RwLock<SafeApi> = RwLock::new(SafeApi { #methods_none });
@@ -200,8 +198,8 @@ fn map_type(t: &str) -> TokenStream {
 				.unwrap()
 		}
 		_ if t.starts_with("godot_") => {
-			if t.ends_with(" *") {
-				format!("&mut sys::{}", &t[..t.len() - " *".len()])
+			if let Some(t) = t.strip_suffix(" *") {
+				format!("&mut sys::{}", t)
 					.parse()
 					.unwrap()
 			} else {
@@ -227,8 +225,8 @@ fn map_type_safe(t: &str) -> TokenStream {
 		"bool" => quote!(bool),
 		"float" | "real_t" => quote!(f32),
 		_ if t.starts_with("godot_") => {
-			if t.ends_with(" *") {
-				format!("&mut sys::{}", &t[..t.len() - " *".len()])
+			if let Some(t) = t.strip_suffix(" *") {
+				format!("&mut sys::{}", t)
 					.parse()
 					.unwrap()
 			} else {

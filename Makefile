@@ -18,6 +18,9 @@ debug: rapier3d/api.json
 	GODOT_PATH=$(GODOT) cargo build
 	cp target/debug/librapier3d.so $(OUTPUT_DIR)/librapier3d.so
 
+export-linux: linux
+	$(GODOT) --export "Linux/X11" bin/rapier_test.x86_64
+
 clean:
 	cargo clean
 	rm rapier3d/api.json || true

@@ -1,5 +1,6 @@
 #![feature(destructuring_assignment)]
 
+mod area;
 mod server;
 mod space;
 mod sparse_vec;

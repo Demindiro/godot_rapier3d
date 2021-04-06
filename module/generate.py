@@ -72,11 +72,14 @@ API_MAYBE_RIDS = {
 
 # Extra functions to add to the API
 API_CUSTOM_FUNCTIONS = {
-    'area_get_monitor_event': ('void', [
-        ('uint32_t', 'index'),
+    'area_get_body_event': ('bool', [
+        ('index_t', 'area'),
         ('struct physics_area_monitor_event *', 'event')
     ]),
-    'area_get_monitor_event_count': ('uint32_t', []),
+    'area_get_area_event': ('bool', [
+        ('index_t', 'area'),
+        ('struct physics_area_monitor_event *', 'event')
+    ]),
     'body_get_direct_state': ('void', [
         ('index_t', 'body'),
         ('struct physics_body_state *', 'state')
@@ -139,11 +142,16 @@ API_STRUCTS = {
         ('int', 'shape'),
     ],
     'physics_area_monitor_event': [
+        ('index_t', 'id'),
+        ('int', 'object_id'),
+        ('bool', 'added'),
     ]
 }
 
 # Functions for which to validate all RIDs
 VALIDATE_ALL_RIDS = {
+    'area_add_shape',
+    'area_set_shape',
     'body_add_collision_exception',
     'body_remove_collision_exception',
     'body_add_shape',
