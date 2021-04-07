@@ -1,11 +1,13 @@
 #[macro_use]
 mod ffi;
+mod area;
 mod body;
 mod index;
 mod joint;
 mod shape;
 mod space;
 
+use crate::area::Area;
 use crate::space::Space;
 use crate::sparse_vec::SparseVec;
 use crate::*;
@@ -16,28 +18,29 @@ pub use index::*;
 use joint::Joint;
 use rapier3d::na;
 use shape::Shape;
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 lazy_static::lazy_static! {
-	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
+	static ref ACTIVE: RwLock<bool> = RwLock::new(true);
+	static ref AREA_INDICES: RwLock<Indices<Area>> = RwLock::new(Indices::new());
 	static ref BODY_INDICES: RwLock<Indices<Body>> = RwLock::new(Indices::new());
 	static ref JOINT_INDICES: RwLock<Indices<Joint>> = RwLock::new(Indices::new());
 	static ref SHAPE_INDICES: RwLock<Indices<Shape>> = RwLock::new(Indices::new());
-	static ref ACTIVE: RwLock<bool> = RwLock::new(true);
+	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
 }
 
-struct Indices<T> {
+pub struct Indices<T> {
 	elements: SparseVec<(T, u16)>,
 	generation: u16,
 }
 
-enum Instance<A, L> {
+pub enum Instance<A, L> {
 	Attached(A, SpaceIndex),
 	Loose(L),
 }
 
 #[derive(Debug)]
-enum IndexError {
+pub enum IndexError {
 	WrongType,
 	NoElement,
 }
@@ -45,7 +48,7 @@ enum IndexError {
 #[derive(Clone, Copy)]
 pub struct ObjectID(NonZeroU32);
 
-trait MapIndex<T> {
+pub trait MapIndex<T> {
 	fn map<F, R>(&self, f: F) -> Result<R, IndexError>
 	where
 		F: FnOnce(&T) -> R;
@@ -57,9 +60,21 @@ trait MapIndex<T> {
 	fn add(element: T) -> Self;
 
 	fn remove(self) -> Result<T, IndexError>;
+
+	fn read_all() -> RwLockReadGuard<'static, Indices<T>>;
+
+	fn write_all() -> RwLockWriteGuard<'static, Indices<T>>;
 }
 
 trait MapEnumIndex {
+	fn map_area<F, R>(&self, f: F) -> Result<R, IndexError>
+	where
+		F: FnOnce(&Area, AreaIndex) -> R;
+
+	fn map_area_mut<F, R>(&self, f: F) -> Result<R, IndexError>
+	where
+		F: FnOnce(&mut Area, AreaIndex) -> R;
+
 	fn map_body<F, R>(&self, f: F) -> Result<R, IndexError>
 	where
 		F: FnOnce(&Body, BodyIndex) -> R;
@@ -100,8 +115,7 @@ macro_rules! map_index {
 			where
 				F: FnOnce(&$variant) -> R,
 			{
-				const MSG: &str = concat!("Failed to read-lock ", stringify!($variant), " array");
-				let w = $array.read().expect(MSG);
+				let w = Self::read_all();
 				if let Some(element) = w.get(self.index(), self.generation()) {
 					Ok(f(element))
 				} else {
@@ -113,8 +127,7 @@ macro_rules! map_index {
 			where
 				F: FnOnce(&mut $variant) -> R,
 			{
-				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
-				let mut w = $array.write().expect(MSG);
+				let mut w = Self::write_all();
 				if let Some(element) = w.get_mut(self.index(), self.generation()) {
 					Ok(f(element))
 				} else {
@@ -123,20 +136,28 @@ macro_rules! map_index {
 			}
 
 			fn add(element: $variant) -> Self {
-				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
-				let mut w = $array.write().expect(MSG);
+				let mut w = Self::write_all();
 				let (i, g) = w.add(element);
 				Self::new(i, g)
 			}
 
 			fn remove(self) -> Result<$variant, IndexError> {
-				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
-				let mut w = $array.write().expect(MSG);
+				let mut w = Self::write_all();
 				if let Some(element) = w.remove(self.index(), self.generation()) {
 					Ok(element)
 				} else {
 					Err(IndexError::NoElement)
 				}
+			}
+
+			fn read_all() -> RwLockReadGuard<'static, Indices<$variant>> {
+				const MSG: &str = concat!("Failed to read-lock ", stringify!($variant), " array");
+				$array.read().expect(MSG)
+			}
+
+			fn write_all() -> RwLockWriteGuard<'static, Indices<$variant>> {
+				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
+				$array.write().expect(MSG)
 			}
 		}
 	};
@@ -194,7 +215,7 @@ impl<T> Indices<T> {
 		None
 	}
 
-	fn get(&self, index: u32, generation: u16) -> Option<&T> {
+	pub fn get(&self, index: u32, generation: u16) -> Option<&T> {
 		if let Some((e, g)) = self.elements.get(index as usize) {
 			if *g == generation {
 				return Some(e);
@@ -203,7 +224,7 @@ impl<T> Indices<T> {
 		None
 	}
 
-	fn get_mut(&mut self, index: u32, generation: u16) -> Option<&mut T> {
+	pub fn get_mut(&mut self, index: u32, generation: u16) -> Option<&mut T> {
 		if let Some((e, g)) = self.elements.get_mut(index as usize) {
 			if *g == generation {
 				return Some(e);
@@ -212,17 +233,42 @@ impl<T> Indices<T> {
 		None
 	}
 
+	pub fn get_mut2(
+		&mut self,
+		index_a: u32,
+		generation_a: u16,
+		index_b: u32,
+		generation_b: u16,
+	) -> (Option<&mut T>, Option<&mut T>) {
+		let (a, b) = self.elements.get_mut2(index_a as usize, index_b as usize);
+		let a = a.and_then(|(e, g)| if *g == generation_a { Some(e) } else { None });
+		let b = b.and_then(|(e, g)| if *g == generation_b { Some(e) } else { None });
+		(a, b)
+	}
+
 	fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
 		self.elements.iter_mut().map(|v| &mut v.0)
 	}
 }
 
+impl<A, L> Instance<A, L> {
+	pub fn as_attached(&self) -> Option<(&A, SpaceIndex)> {
+		if let Instance::Attached(a, i) = self {
+			Some((a, *i))
+		} else {
+			None
+		}
+	}
+}
+
+map_index!(AREA_INDICES, Area, AreaIndex,);
 map_index!(BODY_INDICES, Body, BodyIndex,);
 map_index!(JOINT_INDICES, Joint, JointIndex,);
 map_index!(SHAPE_INDICES, Shape, ShapeIndex,);
 map_index!(SPACE_INDICES, Space, SpaceIndex,);
 
 impl MapEnumIndex for Index {
+	map_enum_index!(map_area, map_area_mut, AREA_INDICES, Area, AreaIndex,);
 	map_enum_index!(map_body, map_body_mut, BODY_INDICES, Body, BodyIndex,);
 	map_enum_index!(map_joint, map_joint_mut, JOINT_INDICES, Joint, JointIndex,);
 	map_enum_index!(map_shape, map_shape_mut, SHAPE_INDICES, Shape, ShapeIndex,);
@@ -241,23 +287,16 @@ impl ObjectID {
 
 #[macro_export]
 macro_rules! map_or_err {
-	($index:expr, $func:ident) => {
-		let index = &$index;
-		if let Err(e) = index.$func() {
-			use gdnative::prelude::godot_error;
-			match e {
-				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
-				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
-			}
-		}
-	};
-	($index:expr, $func:ident, $($args:expr),*) => {
-		let index = &$index;
-		if let Err(e) = index.$func($($args)*) {
-			use gdnative::prelude::godot_error;
-			match e {
-				IndexError::WrongType => godot_error!("ID is of wrong type {:?}", index),
-				IndexError::NoElement => godot_error!("No element at ID {:?}", index),
+	($index:expr, $func:ident, $closure:expr) => {
+		match $index.$func($closure) {
+			Ok(v) => Some(v),
+			Err(e) => {
+				use gdnative::prelude::godot_error;
+				match e {
+					IndexError::WrongType => godot_error!("ID is of wrong type {:?}", $index),
+					IndexError::NoElement => godot_error!("No element at ID {:?}", $index),
+				}
+				None
 			}
 		}
 	};
@@ -271,6 +310,7 @@ fn init(ffi: &mut ffi::FFI) {
 	ffi.sync(sync);
 	ffi.free(free);
 	ffi.get_process_info(get_process_info);
+	area::init(ffi);
 	body::init(ffi);
 	joint::init(ffi);
 	space::init(ffi);
@@ -283,10 +323,10 @@ fn server_init() {}
 
 fn step(delta: f32) {
 	if *ACTIVE.read().expect("Failed to check ACTIVE") {
-		let mut w = SPACE_INDICES
-			.write()
-			.expect("Failed to write-lock SPACE_INDICES");
-		for space in w.iter_mut() {
+		for area in AreaIndex::write_all().iter_mut() {
+			area.clear_events();
+		}
+		for space in SpaceIndex::write_all().iter_mut() {
 			space.step(delta);
 		}
 	}
@@ -298,12 +338,14 @@ fn flush_queries() {}
 
 fn free(index: Index) {
 	let rem = || -> Result<(), IndexError> {
-		Ok(match index {
+		match index {
+			Index::Area(index) => area::free(index.remove()?),
 			Index::Body(index) => body::free(index.remove()?),
 			Index::Joint(index) => joint::free(index.remove()?),
 			Index::Shape(index) => shape::free(index.remove()?),
 			Index::Space(index) => space::free(index.remove()?),
-		})
+		}
+		Ok(())
 	};
 	if let Err(e) = rem() {
 		godot_error!("Failed to remove index: {:?}", e);

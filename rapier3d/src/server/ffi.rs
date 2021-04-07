@@ -4,7 +4,7 @@
 #![allow(improper_ctypes)]
 #![allow(unused_parens)]
 #![allow(dead_code)]
-#![allow(unused)] // FIXME this is temporary, one of the functions is of type *const ()
+#![allow(clippy::all)]
 
 //include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 include!(concat!(env!("OUT_DIR"), "/ffi.rs"));
@@ -156,5 +156,19 @@ impl PhysicsRayInfo {
 
 	pub fn pick_ray(&self) -> bool {
 		self.pick_ray
+	}
+}
+
+impl PhysicsAreaMonitorEvent {
+	pub fn set_object_id(&mut self, id: Option<ObjectID>) {
+		self.object_id = id.map(ObjectID::get).unwrap_or(0) as i32;
+	}
+
+	pub fn set_index(&mut self, index: Index) {
+		self.id = index.raw();
+	}
+
+	pub fn set_added(&mut self, added: bool) {
+		self.added = added;
 	}
 }

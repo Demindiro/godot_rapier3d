@@ -1,9 +1,9 @@
 use super::*;
 use crate::util::*;
 use gdnative::core_types::*;
-use rapier3d::geometry::SharedShape;
+use rapier3d::geometry::{Collider, ColliderBuilder, SharedShape};
 use rapier3d::math::Point;
-use rapier3d::na::{DMatrix, Dynamic, Matrix, Matrix3x1, Point3};
+use rapier3d::na::{DMatrix, Dynamic, Isometry3, Matrix, Matrix3x1, Point3};
 
 #[derive(Copy, Clone, Debug)]
 enum Type {
@@ -217,7 +217,7 @@ impl Shape {
 				for v in tm_verts.iter() {
 					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
 				}
-				SharedShape::trimesh(verts, tm.indices().iter().map(|v| *v).collect())
+				SharedShape::trimesh(verts, tm.indices().iter().copied().collect())
 			}
 			_ => self.shape.clone(),
 		}
@@ -227,6 +227,17 @@ impl Shape {
 	pub fn free(self) {
 		// FIXME we need to track attached bodies to remove the corresponding shapes
 		godot_error!("TODO free shape");
+	}
+
+	/// Creates a new collider based on the given position and scale
+	pub fn build(&self, position: Isometry3<f32>, scale: Vector3, sensor: bool) -> Collider {
+		let shape_scale = position.rotation * vec_gd_to_na(scale);
+		let shape_scale = vec_gd_to_na(scale).component_mul(&shape_scale);
+		let shape_scale = vec_na_to_gd(shape_scale);
+		ColliderBuilder::new(self.scaled(shape_scale))
+			.position_wrt_parent(position)
+			.sensor(sensor)
+			.build()
 	}
 }
 

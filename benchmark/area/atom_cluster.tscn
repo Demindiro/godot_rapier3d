@@ -1,0 +1,24 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://benchmark/bodies/atom.tscn" type="PackedScene" id=1]
+[ext_resource path="res://benchmark/area/anti_gravity.gd" type="Script" id=2]
+[ext_resource path="res://benchmark/stats.tscn" type="PackedScene" id=3]
+[ext_resource path="res://benchmark/area/gravity_ball.tscn" type="PackedScene" id=4]
+
+[node name="Node" type="Node"]
+script = ExtResource( 2 )
+ball = ExtResource( 1 )
+start = Vector3( -25, 20, -25 )
+distance = Vector3( 1.25, 0, 1.25 )
+count_x = 14
+count_y = 14
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, -18, 39, 29 )
+
+[node name="Stats" parent="." instance=ExtResource( 3 )]
+
+[node name="Area" parent="." instance=ExtResource( 4 )]
+space_override = 4
+gravity = 0.0
+priority = 1.0

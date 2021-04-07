@@ -1,10 +1,12 @@
 use super::index::BodyIndex;
 use super::*;
+use crate::area::Gravity;
 use crate::util::*;
 use gdnative::core_types::*;
 use gdnative::{godot_error, godot_warn};
 use rapier3d::dynamics::{
 	ActivationStatus, BodyStatus, MassProperties, RigidBody, RigidBodyBuilder, RigidBodyHandle,
+	RigidBodySet,
 };
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
@@ -70,9 +72,19 @@ pub struct Body {
 	scale: Vector3,
 	exclusions: Vec<BodyIndex>,
 	collision_groups: InteractionGroups,
+
+	linear_damp: f32,
+	angular_damp: f32,
 	restitution: f32,
 	friction: f32,
+
 	omit_force_integration: bool,
+
+	area_gravity: Option<Vector3>,
+	area_linear_damp: Option<(f32, u32)>,
+	area_angular_damp: Option<(f32, u32)>,
+	area_replace: bool,
+	area_lock: bool,
 }
 
 impl Type {
@@ -94,6 +106,7 @@ impl Type {
 			Type::Character => RigidBodyBuilder::new_dynamic(),
 		}
 		.sleeping(sleep)
+		.additional_mass(1.0)
 		.build()
 	}
 }
@@ -146,9 +159,19 @@ impl Body {
 			scale: Vector3::one(),
 			exclusions: Vec::new(),
 			collision_groups: InteractionGroups::default(),
+
+			angular_damp: -1.0,
+			linear_damp: -1.0,
+
 			restitution: 0.0,
-			friction: 0.0,
+			friction: 1.0,
 			omit_force_integration: false,
+
+			area_gravity: None,
+			area_linear_damp: None,
+			area_angular_damp: None,
+			area_lock: false,
+			area_replace: false,
 		}
 	}
 
@@ -251,7 +274,7 @@ impl Body {
 				let result = shape
 					.index
 					.map(|s| shapes.push(Some((s.scaled(shape_scale), &shape.transform))));
-				if let Err(_) = result {
+				if result.is_err() {
 					godot_error!("Shape is invalid: {:?}", shape.index);
 					shapes.push(None); // Make sure the collider count does still match
 				}
@@ -308,6 +331,128 @@ impl Body {
 				.expect("Invalid space");
 		}
 	}
+
+	/// Adds any forces and damp overrides from an area
+	pub fn area_apply_overrides(
+		&mut self,
+		bodies: &RigidBodySet,
+		replace: bool,
+		gravity: &Gravity,
+		linear_damp: f32,
+		angular_damp: f32,
+		lock: bool,
+	) {
+		if !self.area_lock {
+			let g = match gravity {
+				Gravity::Direction(g) => g.gravity(),
+				Gravity::Point(p) => {
+					if let Instance::Attached((rb, _), _) = &self.body {
+						// Based on code in rigid_body_bullet.cpp
+						// I'm not sure what the logic behind the scale factor is but w/e
+						let body = &bodies[*rb];
+						let dir = p.point() - vec_na_to_gd(body.position().translation.vector);
+						let dist = dir.length();
+						if dist > 0.0 {
+							let scale = p.distance_scale();
+							if scale > 0.0 {
+								let f = dist.mul_add(p.distance_scale(), 1.0);
+								(dir * p.gravity()) / ((f * f) * dist)
+							} else {
+								(dir * p.gravity()) / dist
+							}
+						} else {
+							// We can't divide by 0, so pretend there is no force in the middle of a thing
+							Vector3::zero()
+						}
+					} else {
+						unreachable!();
+					}
+				}
+			};
+			if replace {
+				self.area_gravity = Some(g);
+				self.area_linear_damp = if linear_damp >= 0.0 {
+					Some((linear_damp, 1))
+				} else {
+					None
+				};
+				self.area_angular_damp = if angular_damp >= 0.0 {
+					Some((angular_damp, 1))
+				} else {
+					None
+				};
+				self.area_replace = true;
+			} else {
+				self.area_gravity = if let Some(ag) = self.area_gravity {
+					Some(ag + g)
+				} else {
+					Some(g)
+				};
+				self.area_linear_damp = if let Some((d, i)) = self.area_linear_damp {
+					Some((linear_damp + d, i + 1))
+				} else {
+					Some((linear_damp, 1))
+				};
+				self.area_angular_damp = if let Some((d, i)) = self.area_linear_damp {
+					Some((angular_damp + d, i + 1))
+				} else {
+					Some((angular_damp, 1))
+				};
+			}
+			self.area_lock = lock;
+		}
+	}
+
+	/// Applies any forces and damp overrides added by areas and clears the area lock
+	pub fn apply_area_overrides(
+		&mut self,
+		body: &mut RigidBody,
+		space_linear_damp: f32,
+		space_angular_damp: f32,
+	) {
+		let current_gravity_scale = body.gravity_scale();
+		#[allow(clippy::float_cmp)] // Shut up Clippy
+		if let Some(g) = self.area_gravity {
+			let s = if self.area_replace { 0.0 } else { 1.0 };
+			body.set_gravity_scale(s, s != current_gravity_scale);
+			body.apply_force(vec_gd_to_na(g) * body.mass(), s != current_gravity_scale);
+		} else {
+			body.set_gravity_scale(1.0, current_gravity_scale != 1.0);
+		}
+		body.linear_damping = if let Some((d, i)) = self.area_linear_damp {
+			let i = i as f32;
+			if self.area_replace {
+				d / i
+			} else if self.linear_damp < 0.0 {
+				(space_linear_damp + d * i) / (i + 1.0)
+			} else {
+				(self.linear_damp + d * i) / (i + 1.0)
+			}
+		} else if self.linear_damp < 0.0 {
+			space_linear_damp
+		} else {
+			self.linear_damp
+		};
+		body.angular_damping = if let Some((d, i)) = self.area_angular_damp {
+			let i = i as f32;
+			if self.area_replace {
+				d / i
+			} else if self.angular_damp < 0.0 {
+				(space_angular_damp + d * i) / (i + 1.0)
+			} else {
+				(self.angular_damp + d * i) / (i + 1.0)
+			}
+		} else if self.linear_damp < 0.0 {
+			space_linear_damp
+		} else {
+			self.linear_damp
+		};
+		self.area_gravity = None;
+		self.area_linear_damp = None;
+		self.area_angular_damp = None;
+		self.area_replace = false;
+		self.area_lock = false;
+	}
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
@@ -358,7 +503,7 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 				if let Instance::Attached(_, space) = &body_a.body {
 					space
 						.map_mut(|space| {
-							if let Err(_) = space.add_body_exclusion(index_a, index_b) {
+							if space.add_body_exclusion(index_a, index_b).is_err() {
 								godot_error!("Failed to remove body exclusion");
 							}
 						})
@@ -507,8 +652,7 @@ fn set_param(body: Index, param: i32, value: f32) {
 						f(rb);
 						match param {
 							Param::Bounce(bounce) => {
-								let colliders =
-									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								let colliders = Vec::from(rb.colliders());
 								for c in colliders.into_iter() {
 									let c = space
 										.colliders_mut()
@@ -518,8 +662,7 @@ fn set_param(body: Index, param: i32, value: f32) {
 								}
 							}
 							Param::Friction(friction) => {
-								let colliders =
-									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								let colliders = Vec::from(rb.colliders());
 								for c in colliders.into_iter() {
 									let c = space
 										.colliders_mut()
@@ -630,9 +773,15 @@ fn set_omit_force_integration(body: Index, enable: bool) {
 			let g_scale = if enable { 0.0 } else { 1.0 };
 			match &mut body.body {
 				Instance::Attached((rb, _), space) => {
-					space.map_mut(|space| {
-						space.bodies_mut().get_mut(*rb).expect("Invalid body handle").set_gravity_scale(g_scale, true);
-					}).expect("Invalid space");
+					space
+						.map_mut(|space| {
+							space
+								.bodies_mut()
+								.get_mut(*rb)
+								.expect("Invalid body handle")
+								.set_gravity_scale(g_scale, true);
+						})
+						.expect("Invalid space");
 				}
 				Instance::Loose(body) => {
 					body.set_gravity_scale(g_scale, true);

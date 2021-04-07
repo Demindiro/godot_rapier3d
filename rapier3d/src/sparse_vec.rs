@@ -29,6 +29,23 @@ impl<T> SparseVec<T> {
 		self.elements.get_mut(index).map(Option::as_mut).flatten()
 	}
 
+	pub fn get_mut2(&mut self, index_a: usize, index_b: usize) -> (Option<&mut T>, Option<&mut T>) {
+		let (a, b) = if index_a < index_b {
+			(index_a, index_b)
+		} else {
+			(index_b, index_a)
+		};
+		if a < self.elements.len() {
+			let (l, r) = self.elements.split_at_mut(a + 1);
+			(
+				l.get_mut(a).map(Option::as_mut).flatten(),
+				r.get_mut(b - a).map(Option::as_mut).flatten(),
+			)
+		} else {
+			(None, None)
+		}
+	}
+
 	pub fn remove(&mut self, index: usize) -> Option<T> {
 		if index < self.elements.len() {
 			if let Some(element) = self.elements[index].take() {
