@@ -31,7 +31,7 @@ impl<T> Indices<T> {
 	pub fn add(&mut self, item: T) -> Index {
 		let generation = self.generation;
 		let entry = Entry::Occupied { item, generation };
-		self.generation.wrapping_add(1);
+		self.generation = self.generation.wrapping_add(1);
 		if let Some(index) = self.free_slot {
 			let e = mem::replace(&mut self.elements[index as usize], entry);
 			if let Entry::Free { next } = e {
