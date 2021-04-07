@@ -121,7 +121,7 @@ impl Space {
 				if let Some(area) = self.bodies.get(area) {
 					let area = Area::get_rigidbody_userdata(area).expect("Invalid area userdata");
 					let area = areas
-						.get_mut(area.index(), area.generation())
+						.get_mut(area.into())
 						.expect("Invalid area index");
 					area.clear_events();
 				} else {
@@ -153,7 +153,7 @@ impl Space {
 			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
 				if let Some(b) = Area::get_collider_userdata(b) {
 					let (area_a, area_b) =
-						areas.get_mut2(a.index(), a.generation(), b.index(), b.generation());
+						areas.get2_mut(a.into(), b.into());
 					let area_a = area_a.expect("Invalid area A index");
 					let area_b = area_b.expect("Invalid area B index");
 					if area_b.monitorable() {
@@ -175,7 +175,7 @@ impl Space {
 				panic!("Neither collider is an area");
 			};
 			let area = areas
-				.get_mut(area.index(), area.generation())
+				.get_mut(area.into())
 				.expect("Invalid area index");
 			area.push_body_event(body, event.intersecting);
 		}
@@ -188,7 +188,7 @@ impl Space {
 			let rb = &self.bodies[area];
 			let area = Area::get_rigidbody_userdata(rb).expect("Area body has invalid userdata");
 			let area = areas
-				.get_mut(area.index(), area.generation())
+				.get_mut(area.into())
 				.expect("Invalid area index");
 			area.apply_events(&rb, &mut bodies, &self.bodies);
 		}
@@ -200,7 +200,7 @@ impl Space {
 			if Area::get_rigidbody_userdata(rb).is_none() {
 				let body = Body::get_index(rb);
 				let body = bodies
-					.get_mut(body.index(), body.generation())
+					.get_mut(body.into())
 					.expect("Invalid body index");
 				body.apply_area_overrides(rb, self.default_linear_damp, self.default_angular_damp);
 			}

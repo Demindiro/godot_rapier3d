@@ -1,7 +1,8 @@
 use crate::server::{
-	AreaIndex, Body, BodyIndex, Indices, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex,
+	AreaIndex, Body, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex,
 	AREA_ID,
 };
+use crate::indices::Indices;
 use crate::util::*;
 use core::mem;
 use gdnative::core_types::*;
@@ -493,7 +494,7 @@ impl Area {
 		let gravity = self.gravity(area);
 		for body in self.intersecting_bodies.iter() {
 			let body = bodies
-				.get_mut(body.index(), body.generation())
+				.get_mut(body.into())
 				.expect("Invalid body index");
 			body.area_apply_overrides(
 				rigid_bodies,
