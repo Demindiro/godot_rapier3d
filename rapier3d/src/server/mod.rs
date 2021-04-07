@@ -9,7 +9,7 @@ mod space;
 
 use crate::area::Area;
 use crate::space::Space;
-use crate::sparse_vec::SparseVec;
+use crate::indices::Indices;
 use crate::*;
 pub use body::Body;
 use core::num::NonZeroU32;
@@ -27,11 +27,6 @@ lazy_static::lazy_static! {
 	static ref JOINT_INDICES: RwLock<Indices<Joint>> = RwLock::new(Indices::new());
 	static ref SHAPE_INDICES: RwLock<Indices<Shape>> = RwLock::new(Indices::new());
 	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
-}
-
-pub struct Indices<T> {
-	elements: SparseVec<(T, u16)>,
-	generation: u16,
 }
 
 pub enum Instance<A, L> {
@@ -116,7 +111,7 @@ macro_rules! map_index {
 				F: FnOnce(&$variant) -> R,
 			{
 				let w = Self::read_all();
-				if let Some(element) = w.get(self.index(), self.generation()) {
+				if let Some(element) = w.get(self.into()) {
 					Ok(f(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -128,7 +123,7 @@ macro_rules! map_index {
 				F: FnOnce(&mut $variant) -> R,
 			{
 				let mut w = Self::write_all();
-				if let Some(element) = w.get_mut(self.index(), self.generation()) {
+				if let Some(element) = w.get_mut(self.into()) {
 					Ok(f(element))
 				} else {
 					Err(IndexError::NoElement)
@@ -137,13 +132,12 @@ macro_rules! map_index {
 
 			fn add(element: $variant) -> Self {
 				let mut w = Self::write_all();
-				let (i, g) = w.add(element);
-				Self::new(i, g)
+				w.add(element).into()
 			}
 
 			fn remove(self) -> Result<$variant, IndexError> {
 				let mut w = Self::write_all();
-				if let Some(element) = w.remove(self.index(), self.generation()) {
+				if let Some(element) = w.remove(self.into()) {
 					Ok(element)
 				} else {
 					Err(IndexError::NoElement)
@@ -189,66 +183,6 @@ macro_rules! map_enum_index {
 			}
 		}
 	};
-}
-
-impl<T> Indices<T> {
-	fn new() -> Self {
-		Self {
-			elements: SparseVec::new(),
-			generation: 0,
-		}
-	}
-
-	fn add(&mut self, element: T) -> (u32, u16) {
-		let g = self.generation;
-		self.generation += 1;
-		let i = self.elements.add((element, g)) as u32;
-		(i, g)
-	}
-
-	fn remove(&mut self, index: u32, generation: u16) -> Option<T> {
-		if let Some((_, g)) = self.elements.get(index as usize) {
-			if *g == generation {
-				return self.elements.remove(index as usize).map(|v| v.0);
-			}
-		}
-		None
-	}
-
-	pub fn get(&self, index: u32, generation: u16) -> Option<&T> {
-		if let Some((e, g)) = self.elements.get(index as usize) {
-			if *g == generation {
-				return Some(e);
-			}
-		}
-		None
-	}
-
-	pub fn get_mut(&mut self, index: u32, generation: u16) -> Option<&mut T> {
-		if let Some((e, g)) = self.elements.get_mut(index as usize) {
-			if *g == generation {
-				return Some(e);
-			}
-		}
-		None
-	}
-
-	pub fn get_mut2(
-		&mut self,
-		index_a: u32,
-		generation_a: u16,
-		index_b: u32,
-		generation_b: u16,
-	) -> (Option<&mut T>, Option<&mut T>) {
-		let (a, b) = self.elements.get_mut2(index_a as usize, index_b as usize);
-		let a = a.and_then(|(e, g)| if *g == generation_a { Some(e) } else { None });
-		let b = b.and_then(|(e, g)| if *g == generation_b { Some(e) } else { None });
-		(a, b)
-	}
-
-	fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-		self.elements.iter_mut().map(|v| &mut v.0)
-	}
 }
 
 impl<A, L> Instance<A, L> {
@@ -323,10 +257,10 @@ fn server_init() {}
 
 fn step(delta: f32) {
 	if *ACTIVE.read().expect("Failed to check ACTIVE") {
-		for area in AreaIndex::write_all().iter_mut() {
+		for (_, area) in AreaIndex::write_all().iter_mut() {
 			area.clear_events();
 		}
-		for space in SpaceIndex::write_all().iter_mut() {
+		for (_, space) in SpaceIndex::write_all().iter_mut() {
 			space.step(delta);
 		}
 	}
