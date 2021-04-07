@@ -520,8 +520,8 @@ impl DirectionGravity {
 impl PointGravity {
 	fn new(gravity: f32, point: Vector3, distance_scale: f32) -> Self {
 		Self {
-			gravity,
 			point,
+			gravity,
 			distance_scale,
 		}
 	}

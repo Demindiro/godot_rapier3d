@@ -130,7 +130,7 @@ impl Space {
 					rm.push(i as u32);
 				}
 			}
-			if rm.len() > 0 {
+			if !rm.is_empty() {
 				remove.push((prio, rm));
 			}
 		}
@@ -141,7 +141,7 @@ impl Space {
 			for i in rm.into_iter().rev() {
 				v.swap_remove(i as usize);
 			}
-			if v.len() == 0 {
+			if v.is_empty() {
 				self.area_map.remove(&p);
 			}
 		}
@@ -152,7 +152,8 @@ impl Space {
 			let b = &self.colliders[event.collider2];
 			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
 				if let Some(b) = Area::get_collider_userdata(b) {
-					let (area_a, area_b) = areas.get_mut2(a.index(), a.generation(), b.index(), b.generation());
+					let (area_a, area_b) =
+						areas.get_mut2(a.index(), a.generation(), b.index(), b.generation());
 					let area_a = area_a.expect("Invalid area A index");
 					let area_b = area_b.expect("Invalid area B index");
 					if area_b.monitorable() {
@@ -180,7 +181,7 @@ impl Space {
 		}
 
 		// Process body contacts (TODO)
-		while let Ok(_) = self.contact_recv.try_recv() {}
+		while self.contact_recv.try_recv().is_ok() {}
 
 		// Register area space overrides to bodies
 		for &area in self.area_map.values().rev().flat_map(|v| v.iter()) {
@@ -196,9 +197,7 @@ impl Space {
 		//for rb in self.bodies.iter_mut().map(|v| v.1) {
 		for (_, rb) in self.bodies.iter_mut() {
 			// FIXME *puke*
-			if let Some(_) = Area::get_rigidbody_userdata(rb) {
-				// *gag*
-			} else {
+			if Area::get_rigidbody_userdata(rb).is_none() {
 				let body = Body::get_index(rb);
 				let body = bodies
 					.get_mut(body.index(), body.generation())
@@ -334,7 +333,7 @@ impl Space {
 		self.update_query_pipeline();
 		let dir = to - from;
 		let (dir, max_toi) = (dir.normalize(), dir.length());
-		let filter = if exclude.len() > 0 {
+		let filter = if !exclude.is_empty() {
 			Some(|_, c: &'_ _| !exclude.contains(&server::Body::get_shape_userdata(c).0))
 		} else {
 			None
@@ -343,7 +342,7 @@ impl Space {
 		// TODO account for excluded colliders
 		// Rapier 0.7 added a `filter` parameter which can be used for the exclusion list.
 		let intersection = self.query_pipeline.cast_ray_and_get_normal(
-			&mut self.colliders,
+			&self.colliders,
 			&Ray::new(Point3::new(from.x, from.y, from.z), vec_gd_to_na(dir)),
 			max_toi,
 			// TODO what is the solid parameter for?
@@ -392,16 +391,16 @@ impl Space {
 		// FIXME move userdata code to area.rs, this may be overwritten by accident in the future
 		let rb = self.bodies.get_mut(area).expect("Invalid handle");
 		let prio = (rb.user_data >> 96) as i32;
-		self.area_map.get_mut(&prio).map(|v| {
+		if let Some(v) = self.area_map.get_mut(&prio) {
 			if let Some(i) = v.iter().position(|e| *e == area) {
 				v.remove(i);
 			}
-		});
+		}
 
 		rb.user_data |= (priority as u32 as u128) << 96;
 		self.area_map
 			.entry(priority)
-			.or_insert(Vec::new())
+			.or_insert_with(Vec::new)
 			.push(area);
 	}
 }
@@ -430,7 +429,7 @@ impl BodyExclusionHooks {
 			}
 		} else {
 			self.exclusions
-				.resize_with(a.index() as usize + 1, || Vec::new());
+				.resize_with(a.index() as usize + 1, Vec::new);
 			self.exclusions[a.index() as usize] = Vec::from([b]);
 			Ok(())
 		}

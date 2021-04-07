@@ -91,7 +91,7 @@ fn add_shape(area: Index, shape: Index, transform: &Transform, enable: bool) {
 
 fn remove_shape(area: Index, shape: i32) {
 	map_or_err!(area, map_area_mut, |area, _| {
-		if let None = area.remove_shape(shape as u32) {
+		if area.remove_shape(shape as u32).is_none() {
 			godot_error!("Invalid shape index");
 		}
 	});
@@ -169,7 +169,7 @@ fn get_space(area: Index) -> Option<Index> {
 fn set_space(area: Index, space: Option<Index>) {
 	let space = if let Some(Some(space)) = space.map(|i| i.as_space()) {
 		Some(space)
-	} else if let Some(_) = space {
+	} else if space.is_some() {
 		godot_error!("Index does not point to a space");
 		return;
 	} else {

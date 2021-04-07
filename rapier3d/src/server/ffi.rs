@@ -4,8 +4,7 @@
 #![allow(improper_ctypes)]
 #![allow(unused_parens)]
 #![allow(dead_code)]
-#![allow(unknown_lints)]
-#![allow(clippy)]
+#![allow(clippy::all)]
 
 //include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 include!(concat!(env!("OUT_DIR"), "/ffi.rs"));

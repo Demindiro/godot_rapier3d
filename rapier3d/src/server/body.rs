@@ -274,7 +274,7 @@ impl Body {
 				let result = shape
 					.index
 					.map(|s| shapes.push(Some((s.scaled(shape_scale), &shape.transform))));
-				if let Err(_) = result {
+				if result.is_err() {
 					godot_error!("Shape is invalid: {:?}", shape.index);
 					shapes.push(None); // Make sure the collider count does still match
 				}
@@ -411,6 +411,7 @@ impl Body {
 		space_angular_damp: f32,
 	) {
 		let current_gravity_scale = body.gravity_scale();
+		#[allow(clippy::float_cmp)] // Shut up Clippy
 		if let Some(g) = self.area_gravity {
 			let s = if self.area_replace { 0.0 } else { 1.0 };
 			body.set_gravity_scale(s, s != current_gravity_scale);
@@ -502,7 +503,7 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 				if let Instance::Attached(_, space) = &body_a.body {
 					space
 						.map_mut(|space| {
-							if let Err(_) = space.add_body_exclusion(index_a, index_b) {
+							if space.add_body_exclusion(index_a, index_b).is_err() {
 								godot_error!("Failed to remove body exclusion");
 							}
 						})
@@ -651,8 +652,7 @@ fn set_param(body: Index, param: i32, value: f32) {
 						f(rb);
 						match param {
 							Param::Bounce(bounce) => {
-								let colliders =
-									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								let colliders = Vec::from(rb.colliders());
 								for c in colliders.into_iter() {
 									let c = space
 										.colliders_mut()
@@ -662,8 +662,7 @@ fn set_param(body: Index, param: i32, value: f32) {
 								}
 							}
 							Param::Friction(friction) => {
-								let colliders =
-									rb.colliders().iter().map(|v| *v).collect::<Vec<_>>();
+								let colliders = Vec::from(rb.colliders());
 								for c in colliders.into_iter() {
 									let c = space
 										.colliders_mut()

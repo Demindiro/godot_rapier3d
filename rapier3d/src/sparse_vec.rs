@@ -37,7 +37,10 @@ impl<T> SparseVec<T> {
 		};
 		if a < self.elements.len() {
 			let (l, r) = self.elements.split_at_mut(a + 1);
-			(l.get_mut(a).map(Option::as_mut).flatten(), r.get_mut(b - a).map(Option::as_mut).flatten())
+			(
+				l.get_mut(a).map(Option::as_mut).flatten(),
+				r.get_mut(b - a).map(Option::as_mut).flatten(),
+			)
 		} else {
 			(None, None)
 		}

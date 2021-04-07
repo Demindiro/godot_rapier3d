@@ -199,9 +199,7 @@ fn map_type(t: &str) -> TokenStream {
 		}
 		_ if t.starts_with("godot_") => {
 			if let Some(t) = t.strip_suffix(" *") {
-				format!("&mut sys::{}", t)
-					.parse()
-					.unwrap()
+				format!("&mut sys::{}", t).parse().unwrap()
 			} else {
 				format!("sys::{}", t).parse().unwrap()
 			}
@@ -226,9 +224,7 @@ fn map_type_safe(t: &str) -> TokenStream {
 		"float" | "real_t" => quote!(f32),
 		_ if t.starts_with("godot_") => {
 			if let Some(t) = t.strip_suffix(" *") {
-				format!("&mut sys::{}", t)
-					.parse()
-					.unwrap()
+				format!("&mut sys::{}", t).parse().unwrap()
 			} else {
 				format!("sys::{}", t).parse().unwrap()
 			}
@@ -243,8 +239,8 @@ fn map_type_safe(t: &str) -> TokenStream {
 }
 
 fn default_value_for_type(t: &str) -> TokenStream {
-	let (t, _) = if t.ends_with(" *") {
-		(&t[..t.len() - 2], true)
+	let (t, _) = if let Some(t) = t.strip_suffix(" *") {
+		(t, true)
 	} else {
 		(t, false)
 	};

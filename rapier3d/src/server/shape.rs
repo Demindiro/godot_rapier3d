@@ -217,7 +217,7 @@ impl Shape {
 				for v in tm_verts.iter() {
 					verts.push(Point3::new(v.x * scale.x, v.y * scale.y, v.z * scale.z));
 				}
-				SharedShape::trimesh(verts, tm.indices().iter().map(|v| *v).collect())
+				SharedShape::trimesh(verts, tm.indices().iter().copied().collect())
 			}
 			_ => self.shape.clone(),
 		}

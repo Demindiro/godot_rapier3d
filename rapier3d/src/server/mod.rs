@@ -233,7 +233,13 @@ impl<T> Indices<T> {
 		None
 	}
 
-	pub fn get_mut2(&mut self, index_a: u32, generation_a: u16, index_b: u32, generation_b: u16) -> (Option<&mut T>, Option<&mut T>) {
+	pub fn get_mut2(
+		&mut self,
+		index_a: u32,
+		generation_a: u16,
+		index_b: u32,
+		generation_b: u16,
+	) -> (Option<&mut T>, Option<&mut T>) {
 		let (a, b) = self.elements.get_mut2(index_a as usize, index_b as usize);
 		let a = a.and_then(|(e, g)| if *g == generation_a { Some(e) } else { None });
 		let b = b.and_then(|(e, g)| if *g == generation_b { Some(e) } else { None });
@@ -332,13 +338,14 @@ fn flush_queries() {}
 
 fn free(index: Index) {
 	let rem = || -> Result<(), IndexError> {
-		Ok(match index {
+		match index {
 			Index::Area(index) => area::free(index.remove()?),
 			Index::Body(index) => body::free(index.remove()?),
 			Index::Joint(index) => joint::free(index.remove()?),
 			Index::Shape(index) => shape::free(index.remove()?),
 			Index::Space(index) => space::free(index.remove()?),
-		})
+		}
+		Ok(())
 	};
 	if let Err(e) = rem() {
 		godot_error!("Failed to remove index: {:?}", e);
