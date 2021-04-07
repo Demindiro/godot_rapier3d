@@ -463,9 +463,11 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_attach_object_instance_id(attach_object_instance_id);
 	ffi.body_create(create);
 	ffi.body_get_direct_state(get_direct_state);
+	ffi.body_get_kinematic_safe_margin(get_kinematic_margin);
 	ffi.body_remove_shape(remove_shape);
 	ffi.body_set_collision_layer(set_collision_layer);
 	ffi.body_set_collision_mask(set_collision_mask);
+	ffi.body_set_kinematic_safe_margin(set_kinematic_margin);
 	ffi.body_set_mode(set_mode);
 	ffi.body_set_omit_force_integration(set_omit_force_integration);
 	ffi.body_set_param(set_param);
@@ -731,6 +733,14 @@ fn set_collision_mask(body: Index, mask: u32) {
 		}
 	});
 }
+
+// Margins are not relevant for Rapier3D
+fn get_kinematic_margin(_: Index) -> f32 {
+	0.0
+}
+
+// Ditto
+fn set_kinematic_margin(_: Index, _: f32) {}
 
 fn set_mode(body: Index, mode: i32) {
 	match Mode::new(mode) {

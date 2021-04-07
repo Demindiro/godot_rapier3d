@@ -243,7 +243,9 @@ impl Shape {
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi.shape_create(create);
+	ffi.shape_get_margin(get_margin);
 	ffi.shape_set_data(set_data);
+	ffi.shape_set_margin(set_margin);
 }
 
 /// Frees the given shape, removing it from any attached rigidbodies
@@ -271,3 +273,11 @@ fn set_data(shape: Index, data: &Variant) {
 		}
 	});
 }
+
+// Not relevant for Rapier3D
+fn get_margin(_: Index) -> f32 {
+	0.0
+}
+
+// Ditto
+fn set_margin(_: Index, _: f32) {}
