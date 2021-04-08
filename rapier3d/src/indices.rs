@@ -105,7 +105,7 @@ impl<T> Indices<T> {
 			} else {
 				None
 			};
-			let b = if let Some(Entry::Occupied { item, generation }) = r.get_mut(bi - ai) {
+			let b = if let Some(Entry::Occupied { item, generation }) = r.get_mut(bi - ai - 1) {
 				if *generation == bg {
 					Some(item)
 				} else {
@@ -150,5 +150,27 @@ impl Index {
 
 	fn split(self) -> (u32, u16) {
 		(self.index, self.generation)
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn get2_mut() {
+		let mut inds = Indices::new();
+		let a = inds.add("foo");
+		let b = inds.add("bar");
+		let (a, b) = inds.get2_mut(a, b);
+		assert_eq!(a, Some(&mut "foo"));
+		assert_eq!(b, Some(&mut "bar"));
+
+		let mut inds = Indices::new();
+		let a = inds.add("bar");
+		let b = inds.add("foo");
+		let (a, b) = inds.get2_mut(a, b);
+		assert_eq!(a, Some(&mut "bar"));
+		assert_eq!(b, Some(&mut "foo"));
 	}
 }
