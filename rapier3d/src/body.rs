@@ -1,10 +1,12 @@
 use crate::area::Gravity;
-use crate::space::Space;
 use crate::indices::Indices;
-use crate::server::{Shape, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex, BODY_ID};
+use crate::server::{BodyIndex, Instance, MapIndex, ObjectID, Shape, ShapeIndex, SpaceIndex};
+use crate::space::Space;
 use crate::util::*;
+use core::convert::{TryFrom, TryInto};
+use core::mem;
 use gdnative::core_types::*;
-use rapier3d::dynamics::{MassProperties, RigidBody, RigidBodyHandle, RigidBodySet, BodyStatus};
+use rapier3d::dynamics::{BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet};
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
 };
@@ -17,6 +19,21 @@ pub struct BodyShape {
 	scale: Vector3,
 	enabled: bool,
 }
+
+#[derive(Debug)]
+pub struct ContactEvent {
+	other_index: BodyIndex,
+	position: Vector3,
+	other_shape: u32,
+	self_shape: u32,
+	normal: Vector3,
+}
+
+pub struct RigidBodyUserdata(u128);
+pub struct ColliderUserdata(u128);
+
+#[derive(Debug)]
+pub struct UserdataMismatch;
 
 pub struct Body {
 	body: Instance<(RigidBodyHandle, Vec<Option<ColliderHandle>>), RigidBody>,
@@ -43,6 +60,9 @@ pub struct Body {
 	area_angular_damp: Option<(f32, u32)>,
 	area_replace: bool,
 	area_lock: bool,
+
+	max_contacts: u32,
+	contacts: Vec<ContactEvent>,
 
 	index: Option<BodyIndex>,
 }
@@ -81,6 +101,9 @@ impl Body {
 			area_lock: false,
 			area_replace: false,
 
+			max_contacts: 0,
+			contacts: Vec::new(),
+
 			index: None,
 		}
 	}
@@ -96,12 +119,12 @@ impl Body {
 	/// Calls the given function with a reference to this body's [`RigidBody`].
 	fn map_rigidbody<F, R>(&self, f: F) -> R
 	where
-		F: FnOnce(&RigidBody) -> R
+		F: FnOnce(&RigidBody) -> R,
 	{
 		match &self.body {
-			Instance::Attached((body, _), space) => {
-				space.map(|space| f(space.get_body(*body).expect("Invalid body handle"))).expect("Invalid space handle")
-			}
+			Instance::Attached((body, _), space) => space
+				.map(|space| f(space.get_body(*body).expect("Invalid body handle")))
+				.expect("Invalid space handle"),
 			Instance::Loose(body) => f(body),
 		}
 	}
@@ -109,12 +132,12 @@ impl Body {
 	/// Calls the given function with a reference to this body's [`RigidBody`].
 	fn map_rigidbody_mut<F, R>(&mut self, f: F) -> R
 	where
-		F: FnOnce(&mut RigidBody) -> R
+		F: FnOnce(&mut RigidBody) -> R,
 	{
 		match &mut self.body {
-			Instance::Attached((body, _), space) => {
-				space.map_mut(|space| f(space.get_body_mut(*body).expect("Invalid body handle"))).expect("Invalid space handle")
-			}
+			Instance::Attached((body, _), space) => space
+				.map_mut(|space| f(space.get_body_mut(*body).expect("Invalid body handle")))
+				.expect("Invalid space handle"),
 			Instance::Loose(body) => f(body),
 		}
 	}
@@ -122,13 +145,16 @@ impl Body {
 	/// Calls the given function on all of the colliders of this body, if any.
 	fn map_colliders<F>(&mut self, mut f: F)
 	where
-		F: FnMut(&mut Collider)
+		F: FnMut(&mut Collider),
 	{
 		if let Instance::Attached((_, ch), space) = &mut self.body {
 			space
 				.map_mut(|space| {
 					for ch in ch.iter().filter_map(Option::as_ref) {
-						f(space.colliders_mut().get_mut(*ch).expect("Invalid collider handle"));
+						f(space
+							.colliders_mut()
+							.get_mut(*ch)
+							.expect("Invalid collider handle"));
 					}
 				})
 				.expect("Invalid space handle");
@@ -137,12 +163,31 @@ impl Body {
 
 	/// Attaches the given shape to this body
 	pub fn add_shape(&mut self, shape: &Shape, transform: &Transform, enabled: bool) {
-		self.shapes.push(BodyShape {
+		let (iso, scl) = transform_to_isometry_and_scale(transform);
+		let body_shape = BodyShape {
 			index: shape.index(),
-			transform: transform_to_isometry(*transform),
+			transform: iso,
 			enabled,
-			scale: Vector3::one(),
-		});
+			scale: scl,
+		};
+		let self_scale = self.scale;
+		if let Instance::Attached((rb, colliders), space) = &mut self.body {
+			if enabled {
+				space
+					.map_mut(|space| {
+						let shape_scale = iso.rotation * vec_gd_to_na(scl);
+						let shape_scale = vec_gd_to_na(self_scale).component_mul(&shape_scale);
+						let shape_scale = vec_na_to_gd(shape_scale);
+						let collider = shape.build(body_shape.transform, scl, false);
+						let collider = space.add_collider(collider, *rb);
+						colliders.push(Some(collider));
+					})
+					.expect("Invalid space");
+			} else {
+				colliders.push(None);
+			}
+		}
+		self.shapes.push(body_shape);
 		self.inertia_stale = true
 	}
 
@@ -166,18 +211,6 @@ impl Body {
 		};
 		body.set_mass_properties(mp, true);
 		self.inertia_stale = false;
-	}
-
-	fn set_shape_userdata(collider: &mut Collider, body: BodyIndex, shape: u32) {
-		let body = body.index() as u128 | ((body.generation() as u128) << 32);
-		let shape = (shape as u128) << 64;
-		collider.user_data = body | shape;
-	}
-
-	pub fn get_shape_userdata(collider: &Collider) -> (BodyIndex, u32) {
-		let body = collider.user_data as u64;
-		let shape = (collider.user_data >> 64) as u32;
-		(BodyIndex::new(body as u32, (body >> 32) as u16), shape)
 	}
 
 	pub fn object_id(&self) -> Option<ObjectID> {
@@ -215,7 +248,8 @@ impl Body {
 					.restitution(self.restitution)
 					.friction(self.friction)
 					.build();
-				Body::set_shape_userdata(&mut collider, index, i as u32);
+				collider.user_data =
+					ColliderUserdata::new(index, self.max_contacts > 0, i as u32).into();
 				colliders.push(Some(collider));
 			} else {
 				colliders.push(None);
@@ -228,23 +262,12 @@ impl Body {
 	pub fn set_index(&mut self, index: BodyIndex) {
 		assert_eq!(self.index, None, "Index is already set");
 		self.index = Some(index);
-		let (i, g) = (index.index(), index.generation());
-		if let Instance::Loose(body) = &mut self.body {
-			body.user_data = i as u128 | (g as u128) << 32 | (BODY_ID as u128) << 48;
-		} else {
-			panic!("Body is already assigned to a space");
-		}
+		self.map_rigidbody_mut(|body| body.user_data = RigidBodyUserdata::new(index, false).into());
 	}
 
 	/// Returns the index of this body
 	pub fn index(&self) -> BodyIndex {
 		self.index.expect("Index is not set")
-	}
-
-	/// Get the index from the given body's userdata
-	pub fn get_index(body: &RigidBody) -> BodyIndex {
-		let body = body.user_data as u64;
-		BodyIndex::new(body as u32, (body >> 32) as u16)
 	}
 
 	/// Frees this body, removing it from it's attached space (if any)
@@ -436,7 +459,11 @@ impl Body {
 		self.scale = scl;
 		self.map_rigidbody_mut(|body| body.set_position(iso, true));
 		// FIXME inefficient as hell
-		let shapes = self.create_shapes().into_iter().map(|v| v.map(|v| v.0)).collect::<Vec<_>>();
+		let shapes = self
+			.create_shapes()
+			.into_iter()
+			.map(|v| v.map(|v| v.0))
+			.collect::<Vec<_>>();
 		self.inertia_stale |= match &mut self.body {
 			Instance::Attached((body, _), space) => {
 				let body = *body;
@@ -444,7 +471,12 @@ impl Body {
 					.map_mut(|space| {
 						let body = space.get_body_mut(body).expect("Invalid body handle");
 						body.set_position(iso, true);
-						let iter = body.colliders().iter().copied().zip(shapes.into_iter()).collect::<Vec<_>>();
+						let iter = body
+							.colliders()
+							.iter()
+							.copied()
+							.zip(shapes.into_iter())
+							.collect::<Vec<_>>();
 						for (handle, shape) in iter {
 							space
 								.get_collider_mut(handle)
@@ -560,7 +592,12 @@ impl Body {
 	}
 
 	/// Sets the transform of a shape and optionally scales it
-	pub fn set_shape_transform(&mut self, shape: u32, transform: &Transform, scale: bool) -> Result<(), InvalidShape> {
+	pub fn set_shape_transform(
+		&mut self,
+		shape: u32,
+		transform: &Transform,
+		scale: bool,
+	) -> Result<(), InvalidShape> {
 		if let Some(shp) = self.shapes.get_mut(shape as usize) {
 			let (iso, scl) = transform_to_isometry_and_scale(transform);
 			shp.transform = iso;
@@ -570,14 +607,19 @@ impl Body {
 					let shape_scale = iso.rotation * vec_gd_to_na(shp.scale);
 					let shape_scale = vec_gd_to_na(self.scale).component_mul(&shape_scale);
 					let shape_scale = vec_na_to_gd(shape_scale);
-					let shape = shp.index.map(|shape| shape.scaled(shape_scale)).expect("Invalid shape index");
-				   space.map_mut(|space| {
-						let c = space
-							.get_collider_mut(collider)
-							.expect("Invalid collider handle");
-						c.set_shape(shape);
-						c.set_position_wrt_parent(iso);
-				   }).expect("Invalid space index");
+					let shape = shp
+						.index
+						.map(|shape| shape.scaled(shape_scale))
+						.expect("Invalid shape index");
+					space
+						.map_mut(|space| {
+							let c = space
+								.get_collider_mut(collider)
+								.expect("Invalid collider handle");
+							c.set_shape(shape);
+							c.set_position_wrt_parent(iso);
+						})
+						.expect("Invalid space index");
 				}
 			}
 			Ok(())
@@ -696,11 +738,15 @@ impl Body {
 	pub fn remove_shape(&mut self, shape: u32) -> Result<(), InvalidShape> {
 		if (shape as usize) < self.shapes.len() {
 			self.shapes.remove(shape as usize);
-			if let Instance::Attached((_, colliders), space) = &self.body {
-				if let Some(collider) = colliders[shape as usize] {
-					space.map_mut(|space| {
-						space.remove_collider(collider).expect("Invalid collider handle");
-					}).expect("Invalid space handle");
+			if let Instance::Attached((_, colliders), space) = &mut self.body {
+				if let Some(collider) = colliders.remove(shape as usize) {
+					space
+						.map_mut(|space| {
+							space
+								.remove_collider(collider)
+								.expect("Invalid collider handle");
+						})
+						.expect("Invalid space handle");
 				}
 			}
 			Ok(())
@@ -711,8 +757,277 @@ impl Body {
 
 	/// Updates the state of this rigidbody if it's stale
 	pub fn refresh_state(&mut self, body: &mut RigidBody, shapes: &mut Indices<Shape>) {
+		self.contacts.clear();
 		if self.inertia_stale {
 			self.recalculate_inertia(body, shapes);
 		}
+	}
+
+	/// Sets the maximum amount of contacts this body should keep track of
+	pub fn set_max_contacts(&mut self, count: u32) {
+		if self.contacts.len() > count as usize {
+			self.contacts.resize_with(count as usize, || unreachable!());
+		}
+		if (count == 0) != (self.max_contacts == 0) {
+			self.map_rigidbody_mut(|body| {
+				let mut ud = RigidBodyUserdata::try_from(&*body).unwrap();
+				ud.set_monitoring(count != 0);
+				body.user_data = ud.into();
+			});
+		}
+		self.max_contacts = count;
+	}
+
+	/// Adds a contact with another body unless the `max_contacts` limit has been reached,
+	/// in which case it's discarded.
+	pub fn add_contact(&mut self, contact: ContactEvent) {
+		if self.contacts.len() < self.max_contacts as usize {
+			self.contacts.push(contact);
+		}
+	}
+
+	/// Returns the amount of active contacts
+	pub fn contact_count(&self) -> u32 {
+		self.contacts.len() as u32
+	}
+
+	/// Returns the given contact if it exists
+	pub fn get_contact(&self, index: u32) -> Option<&ContactEvent> {
+		self.contacts.get(index as usize)
+	}
+}
+
+impl ContactEvent {
+	pub fn new(
+		position: Vector3,
+		other: BodyIndex,
+		other_shape: u32,
+		self_shape: u32,
+		normal: Vector3,
+	) -> Self {
+		Self {
+			position,
+			other_index: other,
+			other_shape,
+			self_shape,
+			normal,
+		}
+	}
+
+	pub fn index(&self) -> BodyIndex {
+		self.other_index
+	}
+
+	pub fn object_id(&self) -> Option<ObjectID> {
+		self.other_index
+			.map(|body| body.object_id())
+			.expect("Invalid body")
+	}
+
+	pub fn other_shape(&self) -> u32 {
+		self.other_shape
+	}
+
+	pub fn self_shape(&self) -> u32 {
+		self.self_shape
+	}
+
+	pub fn position(&self) -> Vector3 {
+		self.position
+	}
+
+	pub fn local_position(&self, body: &RigidBody) -> Vector3 {
+		let p = Point3::from(vec_gd_to_na(self.position));
+		let p = body.position().inverse_transform_point(&p);
+		vec_na_to_gd(p.coords)
+	}
+
+	pub fn local_normal(&self, body: &RigidBody) -> Vector3 {
+		let p = vec_gd_to_na(self.normal);
+		let p = body.position().inverse_transform_vector(&p);
+		vec_na_to_gd(p)
+	}
+}
+
+impl RigidBodyUserdata {
+	const TYPE_MASK: u128 = 0x8000_0000_00000000;
+	const MONITORING_MASK: u128 = 0x0001_0000_00000000;
+	#[allow(dead_code)]
+	const INDEX_MASK: u128 = 0x0000_ffff_ffffffff;
+
+	/// Creates a new userdata intended for rigidbodies. This data is marked to ensure it can
+	/// be identified as belonging to a [`Body`].
+	///
+	/// The data fits entirely within the lower 64 bits of a u128, so the upper 64 bits can be
+	/// used for other purposes
+	///
+	/// The exact format from right to left is:
+	/// - 32 bits for index
+	/// - 16 bits for generation
+	/// - 1 bit for monitoring
+	/// - 14 bits reserved
+	/// - 1 bit body type indicator (always `0` for [`Body`])
+	fn new(index: BodyIndex, monitoring: bool) -> Self {
+		let mut s = Self(0);
+		s.set_index(index);
+		s.set_monitoring(monitoring);
+		s
+	}
+
+	/// Stores an index
+	fn set_index(&mut self, index: BodyIndex) {
+		self.0 &= !Self::INDEX_MASK;
+		self.0 |= index.index() as u128 | (index.generation() as u128) << 32;
+	}
+
+	/// Sets whether this body is monitoring for contacts
+	fn set_monitoring(&mut self, monitoring: bool) {
+		self.0 = if monitoring {
+			self.0 | Self::MONITORING_MASK
+		} else {
+			self.0 & !Self::MONITORING_MASK
+		};
+	}
+
+	/// Returns the index of the body
+	pub fn index(&self) -> BodyIndex {
+		let i = self.0 as u32;
+		let g = (self.0 >> 32) as u16;
+		BodyIndex::new(i, g)
+	}
+
+	/// Returns whether the body is monitoring for contacts
+	pub fn monitoring(&self) -> bool {
+		self.0 & Self::MONITORING_MASK > 0
+	}
+}
+
+impl TryFrom<u128> for RigidBodyUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(n: u128) -> Result<Self, Self::Error> {
+		if n & Self::TYPE_MASK == 0 {
+			Ok(Self(n))
+		} else {
+			Err(UserdataMismatch)
+		}
+	}
+}
+
+impl TryFrom<&RigidBody> for RigidBodyUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(body: &RigidBody) -> Result<Self, Self::Error> {
+		body.user_data.try_into()
+	}
+}
+
+impl Into<crate::indices::Index> for RigidBodyUserdata {
+	fn into(self) -> crate::indices::Index {
+		self.index().into()
+	}
+}
+
+impl Into<u128> for RigidBodyUserdata {
+	fn into(self) -> u128 {
+		self.0
+	}
+}
+
+impl ColliderUserdata {
+	const TYPE_MASK: u128 = 0x00000000_8000_0000_00000000;
+	const MONITORING_MASK: u128 = 0x00000000_0001_0000_00000000;
+	#[allow(dead_code)]
+	const INDEX_MASK: u128 = 0x00000000_0000_ffff_ffffffff;
+	const SHAPE_INDEX_MASK: u128 = 0xffffffff_0000_0000_00000000;
+
+	/// Creates a new userdata intended for [`Collider`]s. This data is marked to ensure it can
+	/// be identified as belonging to a [`Body`].
+	///
+	/// The data fits entirely within the lower 96 bits of a u128, so the upper 32 bits can be
+	/// used for other purposes
+	///
+	/// The exact format from right to left is:
+	/// - 32 bits for index
+	/// - 16 bits for generation
+	/// - 1 bit for monitoring
+	/// - 14 bits reserved
+	/// - 1 bit body type indicator (always `0` for [`Body`])
+	/// - 32 bits for shape index
+	fn new(index: BodyIndex, monitoring: bool, shape: u32) -> Self {
+		let mut s = Self(0);
+		s.set_index(index);
+		s.set_monitoring(monitoring);
+		s.set_shape(shape);
+		s
+	}
+
+	/// Stores an index
+	fn set_index(&mut self, index: BodyIndex) {
+		self.0 = self.0 | index.index() as u128 | (index.generation() as u128) << 32;
+	}
+
+	/// Sets whether this body is monitoring for contacts
+	fn set_monitoring(&mut self, monitoring: bool) {
+		self.0 = if monitoring {
+			self.0 | Self::MONITORING_MASK
+		} else {
+			self.0 & !Self::MONITORING_MASK
+		};
+	}
+
+	/// Stores the index of the [`Collider`] in it's corresponding [`Body`]
+	fn set_shape(&mut self, index: u32) {
+		self.0 &= !Self::SHAPE_INDEX_MASK;
+		self.0 |= (index as u128) << 64;
+	}
+
+	/// Returns the index of the body
+	pub fn index(&self) -> BodyIndex {
+		let i = self.0 as u32;
+		let g = (self.0 >> 32) as u16;
+		BodyIndex::new(i, g)
+	}
+
+	/// Returns whether the body is monitoring for contacts
+	pub fn monitoring(&self) -> bool {
+		self.0 & Self::MONITORING_MASK > 0
+	}
+
+	/// Returns the index of the [`Collider`] in it's corresponding [`Body`]
+	pub fn shape(&self) -> u32 {
+		(self.0 >> 64) as u32
+	}
+}
+
+impl TryFrom<u128> for ColliderUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(n: u128) -> Result<Self, Self::Error> {
+		if n & Self::TYPE_MASK == 0 {
+			Ok(Self(n))
+		} else {
+			Err(UserdataMismatch)
+		}
+	}
+}
+
+impl TryFrom<&Collider> for ColliderUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(body: &Collider) -> Result<Self, Self::Error> {
+		body.user_data.try_into()
+	}
+}
+
+impl Into<crate::indices::Index> for ColliderUserdata {
+	fn into(self) -> crate::indices::Index {
+		self.index().into()
+	}
+}
+
+impl Into<u128> for ColliderUserdata {
+	fn into(self) -> u128 {
+		self.0
 	}
 }

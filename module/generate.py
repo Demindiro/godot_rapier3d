@@ -80,6 +80,11 @@ API_CUSTOM_FUNCTIONS = {
         ('index_t', 'area'),
         ('struct physics_area_monitor_event *', 'event')
     ]),
+    'body_get_contact': ('void', [
+        ('index_t', 'body'),
+        ('uint32_t', 'id'),
+        ('struct physics_body_contact *', 'contact'),
+    ]),
     'body_get_direct_state': ('void', [
         ('index_t', 'body'),
         ('struct physics_body_state *', 'state')
@@ -119,10 +124,22 @@ API_STRUCTS = {
         ('godot_vector3', 'inv_inertia'),
         ('godot_basis', 'inv_inertia_tensor'),
         ('index_t', 'space'),
+        ('uint32_t', 'contact_count'),
         ('real_t', 'inv_mass'),
         ('real_t', 'angular_damp'),
         ('real_t', 'linear_damp'),
         ('bool', 'sleeping'),
+    ],
+    'physics_body_contact': [
+        ('godot_vector3', 'position'),
+        ('godot_vector3', 'velocity'),
+        ('godot_vector3', 'local_position'),
+        ('godot_vector3', 'local_normal'),
+        ('index_t', 'index'),
+        ('uint32_t', 'shape'),
+        ('uint32_t', 'local_shape'),
+        ('int', 'object_id'),
+        ('float', 'impulse'),
     ],
     'physics_ray_info': [
         ('godot_vector3', 'from'),

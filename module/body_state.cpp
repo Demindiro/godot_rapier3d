@@ -99,47 +99,48 @@ bool PluggablePhysicsDirectBodyState::is_sleeping() const {
 };
 
 int PluggablePhysicsDirectBodyState::get_contact_count() const {
-	return 0;
+	return this->state.contact_count;
 }
 
-Vector3 PluggablePhysicsDirectBodyState::get_contact_local_position(int p_contact_idx) const {
-	return Vector3();
+Vector3 PluggablePhysicsDirectBodyState::get_contact_local_position(int id) const {
+	return this->_select_contact(id)->local_position;
 }
 
-Vector3 PluggablePhysicsDirectBodyState::get_contact_local_normal(int p_contact_idx) const {
-	return Vector3();	
+Vector3 PluggablePhysicsDirectBodyState::get_contact_local_normal(int id) const {
+	return this->_select_contact(id)->local_normal;
 }
 
-float PluggablePhysicsDirectBodyState::get_contact_impulse(int p_contact_idx) const {
-	return 0.0;	
+float PluggablePhysicsDirectBodyState::get_contact_impulse(int id) const {
+	return this->_select_contact(id)->impulse;
 }
 
-int PluggablePhysicsDirectBodyState::get_contact_local_shape(int p_contact_idx) const {
-	return 0;	
+int PluggablePhysicsDirectBodyState::get_contact_local_shape(int id) const {
+	return this->_select_contact(id)->local_shape;
 };
 
-RID PluggablePhysicsDirectBodyState::get_contact_collider(int p_contact_idx) const {
-	return RID();	
+RID PluggablePhysicsDirectBodyState::get_contact_collider(int id) const {
+	return this->server->get_rid(this->_select_contact(id)->index);
 };
 
-Vector3 PluggablePhysicsDirectBodyState::get_contact_collider_position(int p_contact_idx) const {
-	return Vector3();
+Vector3 PluggablePhysicsDirectBodyState::get_contact_collider_position(int id) const {
+	return this->_select_contact(id)->position;
 }
 
-ObjectID PluggablePhysicsDirectBodyState::get_contact_collider_id(int p_contact_idx) const {
-	return ObjectID();
+ObjectID PluggablePhysicsDirectBodyState::get_contact_collider_id(int id) const {
+	return this->_select_contact(id)->object_id;
 }
 
-Object *PluggablePhysicsDirectBodyState::get_contact_collider_object(int p_contact_idx) const {
-	return nullptr;
+Object *PluggablePhysicsDirectBodyState::get_contact_collider_object(int id) const {
+	int oid = this->_select_contact(id)->object_id;
+	return oid != 0 ? ObjectDB::get_instance(oid) : nullptr;
 }
 
-int PluggablePhysicsDirectBodyState::get_contact_collider_shape(int p_contact_idx) const {
-	return 0;	
+int PluggablePhysicsDirectBodyState::get_contact_collider_shape(int id) const {
+	return this->_select_contact(id)->shape;
 };
 
-Vector3 PluggablePhysicsDirectBodyState::get_contact_collider_velocity_at_position(int p_contact_idx) const {
-	return Vector3();	
+Vector3 PluggablePhysicsDirectBodyState::get_contact_collider_velocity_at_position(int id) const {
+	return this->_select_contact(id)->velocity;
 };
 
 real_t PluggablePhysicsDirectBodyState::get_step() const {
@@ -154,3 +155,18 @@ PhysicsDirectSpaceState *PluggablePhysicsDirectBodyState::get_space_state() {
 	this->space_state_singleton->space = this->state.space;
 	return this->space_state_singleton;
 };
+
+_FORCE_INLINE_ const struct physics_body_contact *PluggablePhysicsDirectBodyState::_select_contact(int id) const {
+	uint32_t uid = (uint32_t)id;
+	if (this->contact_index != uid) {
+		if (uid < this->state.contact_count) {
+			EXEC_V_FFI_FN(&this->contact, this->server, body_get_contact, this->body, uid, &this->contact);
+			this->contact_index = uid;
+		} else {
+			this->contact = {};
+			this->contact_index = (uint32_t)-1;
+		}
+	}
+	return &this->contact;
+}
+

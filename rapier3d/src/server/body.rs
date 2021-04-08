@@ -131,12 +131,14 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi.body_apply_impulse(apply_impulse);
 	ffi.body_attach_object_instance_id(attach_object_instance_id);
 	ffi.body_create(create);
+	ffi.body_get_contact(get_contact);
 	ffi.body_get_direct_state(get_direct_state);
 	ffi.body_get_kinematic_safe_margin(|_| 0.0);
 	ffi.body_remove_shape(remove_shape);
 	ffi.body_set_collision_layer(set_collision_layer);
 	ffi.body_set_collision_mask(set_collision_mask);
 	ffi.body_set_kinematic_safe_margin(|_, _| ());
+	ffi.body_set_max_contacts_reported(set_max_contacts_reported);
 	ffi.body_set_mode(set_mode);
 	ffi.body_set_omit_force_integration(set_omit_force_integration);
 	ffi.body_set_param(set_param);
@@ -218,28 +220,47 @@ fn attach_object_instance_id(body: Index, id: u32) {
 
 fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 	map_or_err!(body, map_body, |body, _| {
-		body.read_body(|body, space| {
+		body.read_body(|rb, space| {
 			if let Some(space) = space {
-				state.set_transform(&isometry_to_transform(body.position()));
+				state.set_transform(&isometry_to_transform(rb.position()));
 				state.set_space(Index::Space(space));
-				state.set_linear_velocity(vec_na_to_gd(*body.linvel()));
-				state.set_angular_velocity(vec_na_to_gd(*body.angvel()));
-				state.set_sleeping(body.is_sleeping());
-				state.set_linear_damp(body.linear_damping);
-				state.set_angular_damp(body.angular_damping);
-				let mp = body.mass_properties();
+				state.set_linear_velocity(vec_na_to_gd(*rb.linvel()));
+				state.set_angular_velocity(vec_na_to_gd(*rb.angvel()));
+				state.set_sleeping(rb.is_sleeping());
+				state.set_linear_damp(rb.linear_damping);
+				state.set_angular_damp(rb.angular_damping);
+				let mp = rb.mass_properties();
 				state.set_inv_mass(mp.inv_mass);
 				let inv_inertia_sqrt = vec_na_to_gd(mp.inv_principal_inertia_sqrt);
 				state.set_inv_inertia(inv_inertia_sqrt.component_mul(inv_inertia_sqrt));
 				let inv_inertia_tensor = mp.reconstruct_inverse_inertia_matrix();
 				state.set_inv_inertia_tensor(&mat3_to_basis(&inv_inertia_tensor));
+				state.set_contact_count(body.contact_count());
 			}
 		});
 	});
 }
 
+fn get_contact(body: Index, id: u32, contact: &mut ffi::PhysicsBodyContact) {
+	map_or_err!(body, map_body, |body, _| {
+		if let Some(c) = body.get_contact(id) {
+			body.read_body(|rb, _| {
+				contact.set_index(Index::Body(c.index()));
+				contact.set_local_position(c.local_position(rb));
+				contact.set_local_normal(c.local_normal(rb));
+				contact.set_position(c.position());
+				contact.set_object_id(c.object_id());
+				contact.set_shape(c.other_shape());
+			});
+		} else {
+			godot_error!("Invalid contact");
+		}
+	});
+}
+
 fn remove_shape(body: Index, shape: i32) {
-	map_or_err!(body, map_body_mut, |body, _| body.remove_shape(shape as u32));
+	map_or_err!(body, map_body_mut, |body, _| body
+		.remove_shape(shape as u32));
 }
 
 fn set_param(body: Index, param: i32, value: f32) {
@@ -294,16 +315,19 @@ fn set_mode(body: Index, mode: i32) {
 }
 
 fn set_omit_force_integration(body: Index, enable: bool) {
-	map_or_err!(body, map_body_mut, |body, _| body.set_omit_force_integration(enable));
+	map_or_err!(body, map_body_mut, |body, _| body
+		.set_omit_force_integration(enable));
 }
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
-	map_or_err!(body, map_body_mut, |body, _| body.set_shape_transform(shape, transform, true));
+	map_or_err!(body, map_body_mut, |body, _| body
+		.set_shape_transform(shape, transform, true));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
-	map_or_err!(body, map_body_mut, |body, _| body.set_shape_enable(shape as u32, !disable));
+	map_or_err!(body, map_body_mut, |body, _| body
+		.set_shape_enable(shape as u32, !disable));
 }
 
 fn set_space(body: Index, space: Option<Index>) {
@@ -337,6 +361,11 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 			Err(e) => godot_error!("Invalid state: {:?}", e),
 		}
 	});
+}
+
+fn set_max_contacts_reported(body: Index, count: i32) {
+	let count = count as u32;
+	map_or_err!(body, map_body_mut, |body, _| body.set_max_contacts(count));
 }
 
 /// Godot's "It's local position but global rotation" is such a mindfuck that this function exists

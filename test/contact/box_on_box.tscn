@@ -1,0 +1,68 @@
+[gd_scene load_steps=8 format=2]
+
+[ext_resource path="res://addons/3d_batcher/batched_mesh_instance.gdns" type="Script" id=1]
+[ext_resource path="res://test/contact/color_contact.gd" type="Script" id=2]
+[ext_resource path="res://benchmark/bodies/material.tres" type="Material" id=3]
+
+[sub_resource type="BoxShape" id=1]
+extents = Vector3( 4, 1, 4 )
+
+[sub_resource type="CubeMesh" id=2]
+material = ExtResource( 3 )
+size = Vector3( 8, 2, 8 )
+
+[sub_resource type="BoxShape" id=3]
+
+[sub_resource type="CubeMesh" id=4]
+material = ExtResource( 3 )
+
+[node name="Box on box" type="Node"]
+
+[node name="StaticBody" type="StaticBody" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0 )
+__meta__ = {
+"_edit_group_": true
+}
+
+[node name="0" type="CollisionShape" parent="StaticBody"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -5, 0 )
+shape = SubResource( 1 )
+
+[node name="1" type="CollisionShape" parent="StaticBody"]
+shape = SubResource( 1 )
+
+[node name="Mesh" type="Spatial" parent="StaticBody"]
+script = ExtResource( 1 )
+mesh = SubResource( 2 )
+use_color = true
+color = Color( 1, 1, 1, 1 )
+
+[node name="RigidBody" type="RigidBody" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0 )
+contacts_reported = 8
+contact_monitor = true
+can_sleep = false
+script = ExtResource( 2 )
+__meta__ = {
+"_edit_group_": true
+}
+
+[node name="0" type="CollisionShape" parent="RigidBody"]
+shape = SubResource( 3 )
+
+[node name="Mesh" type="Spatial" parent="RigidBody"]
+script = ExtResource( 1 )
+mesh = SubResource( 4 )
+use_color = true
+color = Color( 1, 1, 1, 1 )
+
+[node name="Timer" type="Timer" parent="RigidBody"]
+process_mode = 0
+wait_time = 2.5
+autostart = true
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 12 )
+[connection signal="body_entered" from="RigidBody" to="RigidBody" method="enter"]
+[connection signal="body_exited" from="RigidBody" to="RigidBody" method="exit"]
+[connection signal="timeout" from="RigidBody/Timer" to="RigidBody" method="set_translation" binds= [ Vector3( 0, 3, 0 ) ]]

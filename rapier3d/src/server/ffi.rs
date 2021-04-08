@@ -15,6 +15,7 @@ use gdnative::sys;
 use std::slice;
 
 pub type PhysicsBodyState = physics_body_state;
+pub type PhysicsBodyContact = physics_body_contact;
 pub type PhysicsAreaMonitorEvent = physics_area_monitor_event;
 pub type PhysicsRayResult = physics_ray_result;
 pub type PhysicsRayInfo = physics_ray_info;
@@ -103,6 +104,44 @@ impl PhysicsBodyState {
 
 	pub fn set_center_of_mass(&mut self, center: Vector3) {
 		self.center_of_mass = center.to_sys();
+	}
+
+	pub fn set_contact_count(&mut self, count: u32) {
+		self.contact_count = count;
+	}
+}
+
+impl PhysicsBodyContact {
+	pub fn set_index(&mut self, index: Index) {
+		self.index = index.raw();
+	}
+
+	pub fn set_position(&mut self, position: Vector3) {
+		self.position = position.to_sys();
+	}
+
+	pub fn set_object_id(&mut self, id: Option<ObjectID>) {
+		self.object_id = id.map(ObjectID::get).unwrap_or(0) as i32;
+	}
+
+	pub fn set_shape(&mut self, shape: u32) {
+		self.shape = shape;
+	}
+
+	pub fn set_local_position(&mut self, position: Vector3) {
+		self.local_position = position.to_sys();
+	}
+
+	pub fn set_local_normal(&mut self, normal: Vector3) {
+		self.local_normal = normal.to_sys();
+	}
+
+	pub fn set_local_shape(&mut self, shape: u32) {
+		self.local_shape = shape;
+	}
+
+	pub fn set_impulse(&mut self, impulse: f32) {
+		self.impulse = impulse;
 	}
 }
 

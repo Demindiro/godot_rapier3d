@@ -1,6 +1,7 @@
 use super::*;
-use crate::body::Body;
+use crate::body::{self, Body};
 use crate::util::*;
+use core::convert::TryFrom;
 use gdnative::core_types::*;
 use gdnative::godot_error;
 use rapier3d::dynamics::{JointHandle, JointParams, RevoluteJoint, SpringModel};
@@ -197,8 +198,8 @@ fn disable_collisions_between_bodies(joint: Index, disable: bool) {
 					// for the cleanest way to handle this (should the joint be freed?)
 					let a = space.bodies().get(joint.body1).expect("Invalid body A");
 					let b = space.bodies().get(joint.body2).expect("Invalid body B");
-					let a = Body::get_index(a);
-					let b = Body::get_index(b);
+					let a = body::RigidBodyUserdata::try_from(a).unwrap().index();
+					let b = body::RigidBodyUserdata::try_from(b).unwrap().index();
 					let result = if enable {
 						space.add_body_exclusion(a, b)
 					} else {
