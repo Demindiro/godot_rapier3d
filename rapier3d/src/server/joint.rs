@@ -1,4 +1,5 @@
 use super::*;
+use crate::body::Body;
 use crate::util::*;
 use gdnative::core_types::*;
 use gdnative::godot_error;

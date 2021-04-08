@@ -1,7 +1,6 @@
 use crate::area::Area;
-use crate::server;
-use crate::server::Body;
-use crate::server::{AreaIndex, BodyIndex, MapIndex, SpaceIndex};
+use crate::body::Body;
+use crate::server::{AreaIndex, BodyIndex, MapIndex, SpaceIndex, ShapeIndex};
 use crate::util::*;
 use gdnative::prelude::*;
 use rapier3d::crossbeam::channel::{self, Receiver};
@@ -95,6 +94,21 @@ impl Space {
 	}
 
 	pub fn step(&mut self, delta: f32) {
+
+		let mut areas = AreaIndex::write_all();
+		let mut bodies = BodyIndex::write_all();
+		let mut shapes = ShapeIndex::write_all();
+
+		// Update rigidbodies with stale state
+		for rb in self.bodies.iter_mut() {
+			if Area::get_rigidbody_userdata(rb.1).is_none() {
+				let body = Body::get_index(rb.1);
+				let body = bodies.get_mut(body.into()).expect("Invalid body index");
+				body.refresh_state(rb.1, &mut shapes);
+			}
+		}
+
+		// Step
 		self.integration_parameters.dt = delta;
 		self.physics_pipeline.step(
 			&vec_gd_to_na(self.gravity),
@@ -110,9 +124,6 @@ impl Space {
 		);
 		self.query_pipeline_out_of_date = true;
 
-		let mut areas = AreaIndex::write_all();
-		let mut bodies = BodyIndex::write_all();
-
 		// Clear area events
 		let mut remove = Vec::new();
 		for (&prio, vec) in self.area_map.iter() {
@@ -120,9 +131,7 @@ impl Space {
 			for (i, &area) in vec.iter().enumerate() {
 				if let Some(area) = self.bodies.get(area) {
 					let area = Area::get_rigidbody_userdata(area).expect("Invalid area userdata");
-					let area = areas
-						.get_mut(area.into())
-						.expect("Invalid area index");
+					let area = areas.get_mut(area.into()).expect("Invalid area index");
 					area.clear_events();
 				} else {
 					// u32 is slightly more efficient and cannot be exceeded anyways, as AreaIndex
@@ -152,8 +161,7 @@ impl Space {
 			let b = &self.colliders[event.collider2];
 			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
 				if let Some(b) = Area::get_collider_userdata(b) {
-					let (area_a, area_b) =
-						areas.get2_mut(a.into(), b.into());
+					let (area_a, area_b) = areas.get2_mut(a.into(), b.into());
 					let area_a = area_a.expect("Invalid area A index");
 					let area_b = area_b.expect("Invalid area B index");
 					if area_b.monitorable() {
@@ -174,9 +182,7 @@ impl Space {
 				drop(bodies);
 				panic!("Neither collider is an area");
 			};
-			let area = areas
-				.get_mut(area.into())
-				.expect("Invalid area index");
+			let area = areas.get_mut(area.into()).expect("Invalid area index");
 			area.push_body_event(body, event.intersecting);
 		}
 
@@ -187,21 +193,16 @@ impl Space {
 		for &area in self.area_map.values().rev().flat_map(|v| v.iter()) {
 			let rb = &self.bodies[area];
 			let area = Area::get_rigidbody_userdata(rb).expect("Area body has invalid userdata");
-			let area = areas
-				.get_mut(area.into())
-				.expect("Invalid area index");
+			let area = areas.get_mut(area.into()).expect("Invalid area index");
 			area.apply_events(&rb, &mut bodies, &self.bodies);
 		}
 
 		// Apply space overrides to bodies
-		//for rb in self.bodies.iter_mut().map(|v| v.1) {
-		for (_, rb) in self.bodies.iter_mut() {
+		for rb in self.bodies.iter_mut().map(|v| v.1) {
 			// FIXME *puke*
 			if Area::get_rigidbody_userdata(rb).is_none() {
 				let body = Body::get_index(rb);
-				let body = bodies
-					.get_mut(body.into())
-					.expect("Invalid body index");
+				let body = bodies.get_mut(body.into()).expect("Invalid body index");
 				body.apply_area_overrides(rb, self.default_linear_damp, self.default_angular_damp);
 			}
 		}
@@ -270,7 +271,6 @@ impl Space {
 
 	/// Make two bodies interact with each other again.
 	/// Returns `Ok` if the bodies did exclude each other, `Err` otherwise.
-	#[allow(dead_code)] // FIXME body_remove_collision_exception needs to be implemented
 	pub fn remove_body_exclusion(
 		&mut self,
 		index_a: BodyIndex,
@@ -334,7 +334,7 @@ impl Space {
 		let dir = to - from;
 		let (dir, max_toi) = (dir.normalize(), dir.length());
 		let filter = if !exclude.is_empty() {
-			Some(|_, c: &'_ _| !exclude.contains(&server::Body::get_shape_userdata(c).0))
+			Some(|_, c: &'_ _| !exclude.contains(&Body::get_shape_userdata(c).0))
 		} else {
 			None
 		};
@@ -354,7 +354,7 @@ impl Space {
 			let position = dir * intersection.toi + from; // MulAdd not implemented :(
 			let normal = vec_na_to_gd(intersection.normal);
 			let collider = self.colliders.get(collider).unwrap();
-			let (body, shape) = server::Body::get_shape_userdata(collider);
+			let (body, shape) = Body::get_shape_userdata(collider);
 			RayCastResult {
 				position,
 				normal,
@@ -402,6 +402,21 @@ impl Space {
 			.entry(priority)
 			.or_insert_with(Vec::new)
 			.push(area);
+	}
+
+	/// Returns a reference to a body if it exists
+	pub fn get_body(&self, body: RigidBodyHandle) -> Option<&RigidBody> {
+		self.bodies.get(body)
+	}
+
+	/// Returns a mutable reference to a body if it exists
+	pub fn get_body_mut(&mut self, body: RigidBodyHandle) -> Option<&mut RigidBody> {
+		self.bodies.get_mut(body)
+	}
+
+	/// Returns a mutable reference to a collider if it exists
+	pub fn get_collider_mut(&mut self, collider: ColliderHandle) -> Option<&mut Collider> {
+		self.colliders.get_mut(collider)
 	}
 }
 
@@ -459,8 +474,8 @@ impl PhysicsHooks for BodyExclusionHooks {
 	}
 
 	fn filter_contact_pair(&self, context: &PairFilterContext) -> Option<SolverFlags> {
-		let a = server::Body::get_index(context.rigid_body1);
-		let b = server::Body::get_index(context.rigid_body2);
+		let a = Body::get_index(context.rigid_body1);
+		let b = Body::get_index(context.rigid_body2);
 		let (a, b) = if a.index() < b.index() {
 			(a, b)
 		} else {

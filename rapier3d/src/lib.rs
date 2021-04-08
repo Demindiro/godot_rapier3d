@@ -1,9 +1,10 @@
 #![feature(destructuring_assignment)]
 
 mod area;
+mod body;
+mod indices;
 mod server;
 mod space;
-mod indices;
 mod util;
 
 // TODO find a proper workaround for E0446
