@@ -44,7 +44,11 @@ impl Param {
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, area_add_shape, add_shape);
-	ffi!(ffi, area_attach_object_instance_id, attach_object_instance_id);
+	ffi!(
+		ffi,
+		area_attach_object_instance_id,
+		attach_object_instance_id
+	);
 	ffi!(ffi, area_clear_shapes, clear_shapes);
 	ffi!(ffi, area_create, create);
 	ffi!(ffi, area_get_area_event, get_area_event);

@@ -117,18 +117,40 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, body_add_shape, add_shape);
 	ffi!(ffi, body_add_collision_exception, add_collision_exception);
 	ffi!(ffi, body_apply_impulse, apply_impulse);
-	ffi!(ffi, body_attach_object_instance_id, attach_object_instance_id);
+	ffi!(
+		ffi,
+		body_attach_object_instance_id,
+		attach_object_instance_id
+	);
 	ffi!(ffi, body_create, create);
+	ffi!(
+		ffi,
+		body_is_continuous_collision_detection_enabled,
+		is_continuous_collision_detection_enabled
+	);
 	ffi!(ffi, body_get_contact, get_contact);
 	ffi!(ffi, body_get_direct_state, get_direct_state);
 	ffi!(ffi, body_get_kinematic_safe_margin, |_| 0.0);
 	ffi!(ffi, body_remove_shape, remove_shape);
 	ffi!(ffi, body_set_collision_layer, set_collision_layer);
 	ffi!(ffi, body_set_collision_mask, set_collision_mask);
+	ffi!(
+		ffi,
+		body_set_enable_continuous_collision_detection,
+		set_enable_continuous_collision_detection
+	);
 	ffi!(ffi, body_set_kinematic_safe_margin, |_, _| ());
-	ffi!(ffi, body_set_max_contacts_reported, set_max_contacts_reported);
+	ffi!(
+		ffi,
+		body_set_max_contacts_reported,
+		set_max_contacts_reported
+	);
 	ffi!(ffi, body_set_mode, set_mode);
-	ffi!(ffi, body_set_omit_force_integration, set_omit_force_integration);
+	ffi!(
+		ffi,
+		body_set_omit_force_integration,
+		set_omit_force_integration
+	);
 	ffi!(ffi, body_set_param, set_param);
 	ffi!(ffi, body_set_shape_transform, set_shape_transform);
 	ffi!(ffi, body_set_shape_disabled, set_shape_disabled);
@@ -355,6 +377,14 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 fn set_max_contacts_reported(body: Index, count: i32) {
 	let count = count as u32;
 	map_or_err!(body, map_body_mut, |body, _| body.set_max_contacts(count));
+}
+
+fn is_continuous_collision_detection_enabled(body: Index) -> bool {
+	map_or_err!(body, map_body, |body, _| body.is_ccd_enabled()).unwrap_or(false)
+}
+
+fn set_enable_continuous_collision_detection(body: Index, enable: bool) {
+	map_or_err!(body, map_body_mut, |body, _| body.enable_ccd(enable));
 }
 
 /// Godot's "It's local position but global rotation" is such a mindfuck that this function exists

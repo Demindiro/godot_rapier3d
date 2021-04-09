@@ -80,7 +80,7 @@ impl Body {
 			scale: Vector3::one(),
 
 			exclusions: Vec::new(),
-			collision_groups: InteractionGroups::default(),
+			collision_groups: InteractionGroups::new(1, 1),
 			ray_pickable: true,
 
 			angular_damp: -1.0,
@@ -674,13 +674,13 @@ impl Body {
 
 	/// Sets the groups of this body
 	pub fn set_groups(&mut self, groups: u16) {
-		self.collision_groups.with_groups(groups);
+		self.collision_groups = self.collision_groups.with_groups(groups);
 		self.update_interaction_groups();
 	}
 
 	/// Sets the mask of this body
 	pub fn set_mask(&mut self, mask: u16) {
-		self.collision_groups.with_mask(mask);
+		self.collision_groups = self.collision_groups.with_mask(mask);
 		self.update_interaction_groups();
 	}
 
@@ -787,6 +787,16 @@ impl Body {
 	/// Returns the given contact if it exists
 	pub fn get_contact(&self, index: u32) -> Option<&ContactEvent> {
 		self.contacts.get(index as usize)
+	}
+
+	/// Returns whether Continuous Collision Detected (CCD) is enabled
+	pub fn is_ccd_enabled(&self) -> bool {
+		self.map_rigidbody(|body| body.is_ccd_active())
+	}
+
+	/// Enables or disables Continuous Collision Detected (CCD)
+	pub fn enable_ccd(&mut self, enable: bool) {
+		self.map_rigidbody_mut(|body| body.enable_ccd(enable));
 	}
 }
 
