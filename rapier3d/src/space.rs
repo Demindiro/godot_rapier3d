@@ -11,7 +11,7 @@ use rapier3d::dynamics::{
 };
 use rapier3d::geometry::{
 	BroadPhase, Collider, ColliderHandle, ColliderSet, ContactEvent, InteractionGroups,
-	IntersectionEvent, NarrowPhase, Ray, SolverFlags,
+	IntersectionEvent, NarrowPhase, Ray, SolverFlags, InteractionTestMode,
 };
 use rapier3d::na::Point3;
 use rapier3d::pipeline::{
@@ -73,13 +73,18 @@ impl Space {
 	pub fn new() -> Self {
 		let (intersection_send, intersection_recv) = channel::unbounded();
 		let (contact_send, contact_recv) = channel::unbounded();
+		let mut query_pipeline = QueryPipeline::new();
+		query_pipeline.set_interaction_test_mode(InteractionTestMode::OR);
+		let mut narrow_phase = NarrowPhase::new();
+		narrow_phase.set_collision_interaction_test_mode(InteractionTestMode::OR);
+		narrow_phase.set_solver_interaction_test_mode(InteractionTestMode::OR);
 		Space {
 			physics_pipeline: PhysicsPipeline::new(),
-			query_pipeline: QueryPipeline::new(),
+			query_pipeline,
 			gravity: Vector3::new(0.0, -9.81, 0.0),
 			integration_parameters: IntegrationParameters::default(),
 			broad_phase: BroadPhase::new(),
-			narrow_phase: NarrowPhase::new(),
+			narrow_phase,
 			bodies: RigidBodySet::new(),
 			colliders: ColliderSet::new(),
 			joints: JointSet::new(),
@@ -333,7 +338,7 @@ impl Space {
 		&mut self,
 		from: Vector3,
 		to: Vector3,
-		mask: u16,
+		mask: u32,
 		exclude: &[BodyIndex],
 	) -> Option<RayCastResult> {
 		self.update_query_pipeline();
@@ -355,7 +360,7 @@ impl Space {
 			max_toi,
 			// TODO what is the solid parameter for?
 			false,
-			InteractionGroups::new(u16::MAX, mask),
+			InteractionGroups::new(u32::MAX, mask),
 			filter.map(|v| v as &dyn Fn(_, &'_ _) -> bool),
 		);
 		intersection.map(|(collider, intersection)| {

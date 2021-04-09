@@ -38,13 +38,11 @@ fn intersect_ray(
 					// TODO ditto?
 				}
 			}
-			// FIXME document the fact that bitmasks are limited to 16 bits (which honestly should be plenty
-			// for all games, but people may still be using the upper 4 bits of the 20(?) available)
 			space
 				.cast_ray(
 					info.from(),
 					info.to(),
-					info.collision_mask() as u16,
+					info.collision_mask(),
 					&exclude[..],
 				)
 				.map(|res| {

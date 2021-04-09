@@ -673,13 +673,13 @@ impl Body {
 	}
 
 	/// Sets the groups of this body
-	pub fn set_groups(&mut self, groups: u16) {
+	pub fn set_groups(&mut self, groups: u32) {
 		self.collision_groups = self.collision_groups.with_groups(groups);
 		self.update_interaction_groups();
 	}
 
 	/// Sets the mask of this body
-	pub fn set_mask(&mut self, mask: u16) {
+	pub fn set_mask(&mut self, mask: u32) {
 		self.collision_groups = self.collision_groups.with_mask(mask);
 		self.update_interaction_groups();
 	}

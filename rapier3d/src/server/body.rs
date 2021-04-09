@@ -3,7 +3,7 @@ use super::*;
 use crate::body::Body;
 use crate::util::*;
 use gdnative::core_types::*;
-use gdnative::{godot_error, godot_warn};
+use gdnative::godot_error;
 use rapier3d::dynamics::{ActivationStatus, BodyStatus, RigidBody, RigidBodyBuilder};
 
 #[derive(Debug)]
@@ -292,19 +292,11 @@ fn set_param(body: Index, param: i32, value: f32) {
 }
 
 fn set_collision_layer(body: Index, layer: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((layer >> 16) & 0xf) != 0 && ((layer >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(body, map_body_mut, |body, _| body.set_groups(layer as u16));
+	map_or_err!(body, map_body_mut, |body, _| body.set_groups(layer));
 }
 
 fn set_collision_mask(body: Index, mask: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((mask >> 16) & 0xf) != 0 && ((mask >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(body, map_body_mut, |body, _| body.set_mask(mask as u16));
+	map_or_err!(body, map_body_mut, |body, _| body.set_mask(mask));
 }
 
 fn set_mode(body: Index, mode: i32) {
