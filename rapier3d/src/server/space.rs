@@ -2,10 +2,10 @@ use super::*;
 use crate::space::Space;
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.space_create(create);
-	ffi.space_is_active(is_active);
-	ffi.space_set_active(set_active);
-	ffi.space_intersect_ray(intersect_ray);
+	ffi!(ffi, space_create, create);
+	ffi!(ffi, space_is_active, is_active);
+	ffi!(ffi, space_set_active, set_active);
+	ffi!(ffi, space_intersect_ray, intersect_ray);
 }
 
 pub fn free(_space: Space) {}

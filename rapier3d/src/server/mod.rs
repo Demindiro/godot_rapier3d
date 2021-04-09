@@ -237,13 +237,13 @@ macro_rules! map_or_err {
 }
 
 fn init(ffi: &mut ffi::FFI) {
-	ffi.set_active(set_active);
-	ffi.init(server_init);
-	ffi.flush_queries(flush_queries);
-	ffi.step(step);
-	ffi.sync(sync);
-	ffi.free(free);
-	ffi.get_process_info(get_process_info);
+	ffi!(ffi, set_active, set_active);
+	ffi!(ffi, init, server_init);
+	ffi!(ffi, flush_queries, flush_queries);
+	ffi!(ffi, step, step);
+	ffi!(ffi, sync, sync);
+	ffi!(ffi, free, free);
+	ffi!(ffi, get_process_info, get_process_info);
 	area::init(ffi);
 	body::init(ffi);
 	joint::init(ffi);
