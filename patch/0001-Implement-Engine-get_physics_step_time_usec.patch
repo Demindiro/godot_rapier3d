@@ -1,0 +1,101 @@
+From cc7ece1011622b8b662042b93fb002806b2e8321 Mon Sep 17 00:00:00 2001
+From: David Hoppenbrouwers <david@salt-inc.org>
+Date: Thu, 25 Mar 2021 00:20:46 +0100
+Subject: [PATCH] Implement Engine::get_physics_step_time_usec
+
+---
+ core/bind/core_bind.cpp | 6 ++++++
+ core/bind/core_bind.h   | 1 +
+ core/engine.cpp         | 1 +
+ core/engine.h           | 2 ++
+ main/main.cpp           | 5 +++++
+ 5 files changed, 15 insertions(+)
+
+diff --git a/core/bind/core_bind.cpp b/core/bind/core_bind.cpp
+index 1d2c39ed6f..3a3b4cfb0e 100644
+--- a/core/bind/core_bind.cpp
++++ b/core/bind/core_bind.cpp
+@@ -3094,6 +3094,11 @@ uint64_t _Engine::get_physics_frames() const {
+ 	return Engine::get_singleton()->get_physics_frames();
+ }
+ 
++uint64_t _Engine::get_physics_step_time_usec() const {
++
++	return Engine::get_singleton()->get_physics_step_time_usec();
++}
++
+ uint64_t _Engine::get_idle_frames() const {
+ 
+ 	return Engine::get_singleton()->get_idle_frames();
+@@ -3175,6 +3180,7 @@ void _Engine::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("set_physics_jitter_fix", "physics_jitter_fix"), &_Engine::set_physics_jitter_fix);
+ 	ClassDB::bind_method(D_METHOD("get_physics_jitter_fix"), &_Engine::get_physics_jitter_fix);
+ 	ClassDB::bind_method(D_METHOD("get_physics_interpolation_fraction"), &_Engine::get_physics_interpolation_fraction);
++	ClassDB::bind_method(D_METHOD("get_physics_step_time_usec"), &_Engine::get_physics_step_time_usec);
+ 	ClassDB::bind_method(D_METHOD("set_target_fps", "target_fps"), &_Engine::set_target_fps);
+ 	ClassDB::bind_method(D_METHOD("get_target_fps"), &_Engine::get_target_fps);
+ 
+diff --git a/core/bind/core_bind.h b/core/bind/core_bind.h
+index d880ac145a..80ff997dfe 100644
+--- a/core/bind/core_bind.h
++++ b/core/bind/core_bind.h
+@@ -754,6 +754,7 @@ public:
+ 	void set_physics_jitter_fix(float p_threshold);
+ 	float get_physics_jitter_fix() const;
+ 	float get_physics_interpolation_fraction() const;
++	uint64_t get_physics_step_time_usec() const;
+ 
+ 	void set_target_fps(int p_fps);
+ 	int get_target_fps() const;
+diff --git a/core/engine.cpp b/core/engine.cpp
+index a1e67bde5e..65a060e554 100644
+--- a/core/engine.cpp
++++ b/core/engine.cpp
+@@ -233,5 +233,6 @@ Engine::Engine() {
+ 	_in_physics = false;
+ 	_frame_ticks = 0;
+ 	_frame_step = 0;
++	_physics_step_time_usec = 0;
+ 	editor_hint = false;
+ }
+diff --git a/core/engine.h b/core/engine.h
+index b13fba676b..9f4506c201 100644
+--- a/core/engine.h
++++ b/core/engine.h
+@@ -64,6 +64,7 @@ private:
+ 	bool _pixel_snap;
+ 	uint64_t _physics_frames;
+ 	float _physics_interpolation_fraction;
++	uint64_t _physics_step_time_usec;
+ 
+ 	uint64_t _idle_frames;
+ 	bool _in_physics;
+@@ -97,6 +98,7 @@ public:
+ 	uint64_t get_idle_frame_ticks() const { return _frame_ticks; }
+ 	float get_idle_frame_step() const { return _frame_step; }
+ 	float get_physics_interpolation_fraction() const { return _physics_interpolation_fraction; }
++	float get_physics_step_time_usec() const { return _physics_step_time_usec; }
+ 
+ 	void set_time_scale(float p_scale);
+ 	float get_time_scale() const;
+diff --git a/main/main.cpp b/main/main.cpp
+index 551b5ccf5d..d477957ca9 100644
+--- a/main/main.cpp
++++ b/main/main.cpp
+@@ -2088,8 +2088,13 @@ bool Main::iteration() {
+ 
+ 		message_queue->flush();
+ 
++		OS *os = OS::get_singleton();
++		uint64_t start_3d = os->get_ticks_usec();
++
+ 		PhysicsServer::get_singleton()->step(frame_slice * time_scale);
+ 
++		Engine::get_singleton()->_physics_step_time_usec = os->get_ticks_usec() - start_3d;
++
+ 		Physics2DServer::get_singleton()->end_sync();
+ 		Physics2DServer::get_singleton()->step(frame_slice * time_scale);
+ 
+-- 
+2.20.1
+

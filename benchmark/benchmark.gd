@@ -10,6 +10,11 @@ export var frames_per_test := 1000
 func _enter_tree():
 	var file := File.new()
 
+	if not Engine.has_method("get_physics_step_time_usec"):
+		print("Engine::get_physics_step_time_usec not found, this may affect measurement accuracy")
+		print("Use a Godot build with the provided patch to ensure only the time spent inside")
+		print("PhysicServer::step is measured")
+
 	var eng: String = ProjectSettings.get("physics/3d/physics_engine").to_lower()
 	for m in get_method_list():
 		m = m["name"]
@@ -23,11 +28,15 @@ func _enter_tree():
 
 		var time: float
 		for _i in frames_per_test:
-			time = OS.get_ticks_msec()
-			yield(get_tree(), "physics_frame")
-			var t := OS.get_ticks_msec()
-			file.store_line(str(t - time))
-			time = t
+			if Engine.has_method("get_physics_step_time_usec"):
+				yield(get_tree(), "physics_frame")
+				file.store_line(str(Engine.get_physics_step_time_usec()))
+			else:
+				time = OS.get_ticks_usec()
+				yield(get_tree(), "physics_frame")
+				var t := OS.get_ticks_usec()
+				file.store_line(str(t - time))
+				time = t
 
 		file.close()
 		node.queue_free()
