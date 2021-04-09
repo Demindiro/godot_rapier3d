@@ -183,9 +183,6 @@ impl Space {
 			} else if let Some(b) = Area::get_collider_userdata(b) {
 				(b, body::ColliderUserdata::try_from(a).unwrap().index())
 			} else {
-				// I suppose it makes sense to avoid poisoning the locks?
-				drop(areas);
-				drop(bodies);
 				panic!("Neither collider is an area");
 			};
 			let area = areas.get_mut(area.into()).expect("Invalid area index");
