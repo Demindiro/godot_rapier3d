@@ -272,10 +272,10 @@ impl Shape {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.shape_create(create);
-	ffi.shape_get_margin(|_| 0.0);
-	ffi.shape_set_margin(|_, _| ());
-	ffi.shape_set_data(set_data);
+	ffi!(ffi, shape_create, create);
+	ffi!(ffi, shape_get_margin, |_| 0.0);
+	ffi!(ffi, shape_set_margin, |_, _| ());
+	ffi!(ffi, shape_set_data, set_data);
 }
 
 /// Frees the given shape, removing it from any attached rigidbodies

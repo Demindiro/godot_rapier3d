@@ -43,31 +43,31 @@ impl Param {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.area_add_shape(add_shape);
-	ffi.area_attach_object_instance_id(attach_object_instance_id);
-	ffi.area_clear_shapes(clear_shapes);
-	ffi.area_create(create);
-	ffi.area_get_area_event(get_area_event);
-	ffi.area_get_body_event(get_body_event);
-	ffi.area_get_object_instance_id(get_object_instance_id);
-	ffi.area_get_shape(get_shape);
-	ffi.area_get_shape_transform(get_shape_transform);
-	ffi.area_get_space(get_space);
-	ffi.area_get_space_override_mode(get_space_override_mode);
-	ffi.area_get_transform(get_transform);
-	ffi.area_is_ray_pickable(is_ray_pickable);
-	ffi.area_remove_shape(remove_shape);
-	ffi.area_set_collision_layer(set_collision_layer);
-	ffi.area_set_collision_mask(set_collision_mask);
-	ffi.area_set_monitorable(set_monitorable);
-	ffi.area_set_param(set_param);
-	ffi.area_set_ray_pickable(set_ray_pickable);
-	ffi.area_set_shape(set_shape);
-	ffi.area_set_shape_disabled(set_shape_disabled);
-	ffi.area_set_shape_transform(set_shape_transform);
-	ffi.area_set_space(set_space);
-	ffi.area_set_space_override_mode(set_space_override_mode);
-	ffi.area_set_transform(set_transform);
+	ffi!(ffi, area_add_shape, add_shape);
+	ffi!(ffi, area_attach_object_instance_id, attach_object_instance_id);
+	ffi!(ffi, area_clear_shapes, clear_shapes);
+	ffi!(ffi, area_create, create);
+	ffi!(ffi, area_get_area_event, get_area_event);
+	ffi!(ffi, area_get_body_event, get_body_event);
+	ffi!(ffi, area_get_object_instance_id, get_object_instance_id);
+	ffi!(ffi, area_get_shape, get_shape);
+	ffi!(ffi, area_get_shape_transform, get_shape_transform);
+	ffi!(ffi, area_get_space, get_space);
+	ffi!(ffi, area_get_space_override_mode, get_space_override_mode);
+	ffi!(ffi, area_get_transform, get_transform);
+	ffi!(ffi, area_is_ray_pickable, is_ray_pickable);
+	ffi!(ffi, area_remove_shape, remove_shape);
+	ffi!(ffi, area_set_collision_layer, set_collision_layer);
+	ffi!(ffi, area_set_collision_mask, set_collision_mask);
+	ffi!(ffi, area_set_monitorable, set_monitorable);
+	ffi!(ffi, area_set_param, set_param);
+	ffi!(ffi, area_set_ray_pickable, set_ray_pickable);
+	ffi!(ffi, area_set_shape, set_shape);
+	ffi!(ffi, area_set_shape_disabled, set_shape_disabled);
+	ffi!(ffi, area_set_shape_transform, set_shape_transform);
+	ffi!(ffi, area_set_space, set_space);
+	ffi!(ffi, area_set_space_override_mode, set_space_override_mode);
+	ffi!(ffi, area_set_transform, set_transform);
 }
 
 pub fn free(_area: Area) {

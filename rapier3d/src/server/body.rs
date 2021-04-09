@@ -113,28 +113,28 @@ impl Mode {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.body_add_force(add_force);
-	ffi.body_add_shape(add_shape);
-	ffi.body_add_collision_exception(add_collision_exception);
-	ffi.body_apply_impulse(apply_impulse);
-	ffi.body_attach_object_instance_id(attach_object_instance_id);
-	ffi.body_create(create);
-	ffi.body_get_contact(get_contact);
-	ffi.body_get_direct_state(get_direct_state);
-	ffi.body_get_kinematic_safe_margin(|_| 0.0);
-	ffi.body_remove_shape(remove_shape);
-	ffi.body_set_collision_layer(set_collision_layer);
-	ffi.body_set_collision_mask(set_collision_mask);
-	ffi.body_set_kinematic_safe_margin(|_, _| ());
-	ffi.body_set_max_contacts_reported(set_max_contacts_reported);
-	ffi.body_set_mode(set_mode);
-	ffi.body_set_omit_force_integration(set_omit_force_integration);
-	ffi.body_set_param(set_param);
-	ffi.body_set_shape_transform(set_shape_transform);
-	ffi.body_set_shape_disabled(set_shape_disabled);
-	ffi.body_set_space(set_space);
-	ffi.body_set_state(set_state);
-	ffi.body_set_ray_pickable(set_ray_pickable);
+	ffi!(ffi, body_add_force, add_force);
+	ffi!(ffi, body_add_shape, add_shape);
+	ffi!(ffi, body_add_collision_exception, add_collision_exception);
+	ffi!(ffi, body_apply_impulse, apply_impulse);
+	ffi!(ffi, body_attach_object_instance_id, attach_object_instance_id);
+	ffi!(ffi, body_create, create);
+	ffi!(ffi, body_get_contact, get_contact);
+	ffi!(ffi, body_get_direct_state, get_direct_state);
+	ffi!(ffi, body_get_kinematic_safe_margin, |_| 0.0);
+	ffi!(ffi, body_remove_shape, remove_shape);
+	ffi!(ffi, body_set_collision_layer, set_collision_layer);
+	ffi!(ffi, body_set_collision_mask, set_collision_mask);
+	ffi!(ffi, body_set_kinematic_safe_margin, |_, _| ());
+	ffi!(ffi, body_set_max_contacts_reported, set_max_contacts_reported);
+	ffi!(ffi, body_set_mode, set_mode);
+	ffi!(ffi, body_set_omit_force_integration, set_omit_force_integration);
+	ffi!(ffi, body_set_param, set_param);
+	ffi!(ffi, body_set_shape_transform, set_shape_transform);
+	ffi!(ffi, body_set_shape_disabled, set_shape_disabled);
+	ffi!(ffi, body_set_space, set_space);
+	ffi!(ffi, body_set_state, set_state);
+	ffi!(ffi, body_set_ray_pickable, set_ray_pickable);
 }
 
 /// Frees the given body, removing it from it's attached space (if any)

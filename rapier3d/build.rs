@@ -28,12 +28,10 @@ fn main() {
 
 fn generate_struct(api: &json::JsonValue) -> TokenStream {
 	let mut methods_unsafe = TokenStream::new();
-	let mut methods_safe = TokenStream::new();
 	for info in api["methods"].members() {
 		let method = info["name"].as_str().unwrap();
 		let ret_type = info["return_type"].as_str().unwrap();
 		let mut args_unsafe = TokenStream::new();
-		let mut args_safe = TokenStream::new();
 		for a in info["arguments"].members() {
 			let name = a["name"].as_str().unwrap();
 			assert_eq!(name.find('*'), None, "Method name: \"{}\"", name);
@@ -42,32 +40,18 @@ fn generate_struct(api: &json::JsonValue) -> TokenStream {
 			args_unsafe.extend(quote!(:));
 			args_unsafe.extend(map_type(a["type"].as_str().unwrap()));
 			args_unsafe.extend(quote!(,));
-			let safe_typ = get_type_from_sys(a["type"].as_str().unwrap());
-			args_safe.extend(name);
-			args_safe.extend(quote!(:));
-			args_safe.extend(safe_typ);
-			args_safe.extend(quote!(,));
 		}
 
 		let method = format_ident!("{}", method);
 		let ret = map_type(ret_type);
-		let ret_safe = map_type_safe(ret_type);
 		methods_unsafe.extend(quote! {
-			#method: Option<unsafe extern "C" fn(#args_unsafe) -> #ret>,
-		});
-
-		methods_safe.extend(quote! {
-			#method: Option<fn(#args_safe) -> #ret_safe>,
+			pub #method: Option<unsafe extern "C" fn(#args_unsafe) -> #ret>,
 		});
 	}
 	quote! {
 		#[repr(C)]
 		pub struct UnsafeApi {
 			#methods_unsafe
-		}
-
-		pub struct SafeApi {
-			#methods_safe
 		}
 	}
 }
@@ -92,8 +76,6 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 			params.extend(quote!(:));
 			params.extend(map_type(typ));
 			params.extend(quote!(,));
-			params_safe.extend(name.clone());
-			params_safe.extend(quote!(:));
 			params_safe.extend(get_type_from_sys(typ));
 			params_safe.extend(quote!(,));
 			let (tk, do_forget) = convert_type_from_sys(&name, typ);
@@ -106,10 +88,9 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 			convert_from_sys.extend(tk);
 			convert_from_sys.extend(quote!(;));
 		}
+		let method_wrapped = format_ident!("ffi_{}", method);
 		let method = format_ident!("{}", method);
 		let ret = map_type(ret_type);
-		let ret_safe = map_type_safe(ret_type);
-		let default_ret = default_value_for_type(ret_type);
 		let (ret_wrap_pre, ret_wrap_post) = if ret_type == "maybe_index_t" {
 			(quote!(if let Some(r) = ), quote!({ r.raw() } else { 0 }))
 		} else if ret_type == "index_t" {
@@ -118,37 +99,29 @@ fn generate_impl(api: &json::JsonValue) -> TokenStream {
 			(quote!(), quote!())
 		};
 		methods.extend(quote! {
-			pub fn #method(&mut self, f: fn(#params_safe) -> #ret_safe) {
-				unsafe extern "C" fn wrap(#params) -> #ret {
-					let w = WRAPPERS.read().expect("Failed to read method");
-					if let Some(m) = w.#method {
+			($ffi:ident, #method, $fn:expr) => {
+				#[allow(unused_imports)]
+				#[allow(non_snake_case)]
+				{
+					use gdnative::sys;
+					use crate::server::ffi::*;
+					unsafe extern "C" fn #method_wrapped(#params) -> #ret {
 						#convert_from_sys
-						let r = m(#args);
+						let r = $fn(#args);
 						#forget
 						#ret_wrap_pre r #ret_wrap_post
-					} else {
-						//godot_error!("Method {} is not set", stringify!(#method));
-						#default_ret
+					}
+					// SAFETY: self.table is a valid pointer
+					unsafe {
+						(*$ffi.table).#method = Some(#method_wrapped);
 					}
 				}
-				// SAFETY: self.table is a valid pointer
-				unsafe {
-					(*self.table).#method = Some(wrap);
-					let mut w = WRAPPERS.write().expect("Failed to add method");
-					w.#method = Some(f);
-				}
-			}
+			};
 		});
 		methods_none.extend(quote!(#method: None,));
 	}
 	quote! {
-		use std::sync::RwLock;
-
-		lazy_static::lazy_static! {
-			static ref WRAPPERS: RwLock<SafeApi> = RwLock::new(SafeApi { #methods_none });
-		}
-
-		impl FFI {
+		macro_rules! ffi {
 			#methods
 		}
 	}
@@ -209,54 +182,6 @@ fn map_type(t: &str) -> TokenStream {
 				.parse()
 				.unwrap()
 		}
-		_ => panic!("Unhandled type: {}", t),
-	}
-}
-
-fn map_type_safe(t: &str) -> TokenStream {
-	match t {
-		"index_t" => quote!(Index),
-		"maybe_index_t" => quote!(Option<Index>),
-		"void" => quote!(()),
-		"uint32_t" => quote!(u32),
-		"int" => quote!(i32),
-		"bool" => quote!(bool),
-		"float" | "real_t" => quote!(f32),
-		_ if t.starts_with("godot_") => {
-			if let Some(t) = t.strip_suffix(" *") {
-				format!("&mut sys::{}", t).parse().unwrap()
-			} else {
-				format!("sys::{}", t).parse().unwrap()
-			}
-		}
-		_ if t.starts_with("const godot_") && t.ends_with(" *") => {
-			format!("&sys::{}", &t["const ".len()..t.len() - " *".len()])
-				.parse()
-				.unwrap()
-		}
-		_ => panic!("Unhandled type: {}", t),
-	}
-}
-
-fn default_value_for_type(t: &str) -> TokenStream {
-	let (t, _) = if let Some(t) = t.strip_suffix(" *") {
-		(t, true)
-	} else {
-		(t, false)
-	};
-	match t {
-		"void" => quote!(()),
-		"index_t" | "maybe_index_t" | "int" | "uint32_t" => quote!(0),
-		"bool" => quote!(false),
-		"float" | "real_t" => quote!(0.0),
-		"godot_variant" => quote!(Variant::new().to_sys()),
-		"godot_transform" => quote!(*Transform {
-			basis: Basis::identity(),
-			origin: Vector3::zero()
-		}
-		.sys()),
-		"godot_vector3" => quote!(Vector3::zero().to_sys()),
-		"godot_pool_vector3_array" => quote!(*TypedArray::<Vector3>::new().sys()),
 		_ => panic!("Unhandled type: {}", t),
 	}
 }

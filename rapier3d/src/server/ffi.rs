@@ -36,7 +36,7 @@ macro_rules! gdphysics_init {
 }
 
 pub struct FFI {
-	table: *mut UnsafeApi,
+	pub table: *mut UnsafeApi,
 }
 
 use super::Index;

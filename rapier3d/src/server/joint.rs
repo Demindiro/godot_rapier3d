@@ -125,12 +125,12 @@ impl HingeFlag {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
-	ffi.joint_create_hinge(create_hinge);
-	ffi.joint_disable_collisions_between_bodies(disable_collisions_between_bodies);
-	ffi.joint_get_solver_priority(|_| 0);
-	ffi.joint_set_solver_priority(|_, _| {});
-	ffi.hinge_joint_set_flag(set_hinge_flag);
-	ffi.hinge_joint_set_param(set_hinge_param);
+	ffi!(ffi, joint_create_hinge, create_hinge);
+	ffi!(ffi, joint_disable_collisions_between_bodies, disable_collisions_between_bodies);
+	ffi!(ffi, joint_get_solver_priority, |_| 0);
+	ffi!(ffi, joint_set_solver_priority, |_, _| {});
+	ffi!(ffi, hinge_joint_set_flag, set_hinge_flag);
+	ffi!(ffi, hinge_joint_set_param, set_hinge_param);
 }
 
 /// Frees the given hinge, removing it from it's attached bodies (if any)
