@@ -16,7 +16,7 @@ pub struct Index {
 
 enum Entry<T> {
 	Free { next: Option<u32> },
-	Occupied { item: T, generation: u16 }
+	Occupied { item: T, generation: u16 },
 }
 
 impl<T> Indices<T> {
@@ -51,7 +51,9 @@ impl<T> Indices<T> {
 		if let Some(e) = self.elements.get_mut(index.index as usize) {
 			if let Entry::Occupied { generation, .. } = e {
 				if *generation == index.generation {
-					let entry = Entry::Free { next: self.free_slot };
+					let entry = Entry::Free {
+						next: self.free_slot,
+					};
 					self.free_slot = Some(index.index);
 					if let Entry::Occupied { item, .. } = mem::replace(e, entry) {
 						return Some(item);
@@ -86,21 +88,37 @@ impl<T> Indices<T> {
 
 	pub fn get2_mut(&mut self, index_a: Index, index_b: Index) -> (Option<&mut T>, Option<&mut T>) {
 		let (a, b) = (index_a.split(), index_b.split());
-		let (a, b, swapped) = if a.0 < b.0 { (a, b, false) } else { (b, a, true) };
+		let (a, b, swapped) = if a.0 < b.0 {
+			(a, b, false)
+		} else {
+			(b, a, true)
+		};
 		let ((ai, ag), (bi, bg)) = ((a.0 as usize, a.1), (b.0 as usize, b.1));
 		if ai < self.elements.len() {
 			let (l, r) = self.elements.split_at_mut(ai + 1);
 			let a = if let Entry::Occupied { item, generation } = &mut l[ai] {
-				if *generation == ag { Some(item) } else { None }
+				if *generation == ag {
+					Some(item)
+				} else {
+					None
+				}
 			} else {
 				None
 			};
-			let b = if let Some(Entry::Occupied { item, generation }) = r.get_mut(bi - ai) {
-				if *generation == bg { Some(item) } else { None }
+			let b = if let Some(Entry::Occupied { item, generation }) = r.get_mut(bi - ai - 1) {
+				if *generation == bg {
+					Some(item)
+				} else {
+					None
+				}
 			} else {
 				None
 			};
-			if swapped { (b, a) } else { (a, b) }
+			if swapped {
+				(b, a)
+			} else {
+				(a, b)
+			}
 		} else {
 			(None, None)
 		}
@@ -132,5 +150,27 @@ impl Index {
 
 	fn split(self) -> (u32, u16) {
 		(self.index, self.generation)
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn get2_mut() {
+		let mut inds = Indices::new();
+		let a = inds.add("foo");
+		let b = inds.add("bar");
+		let (a, b) = inds.get2_mut(a, b);
+		assert_eq!(a, Some(&mut "foo"));
+		assert_eq!(b, Some(&mut "bar"));
+
+		let mut inds = Indices::new();
+		let a = inds.add("bar");
+		let b = inds.add("foo");
+		let (a, b) = inds.get2_mut(a, b);
+		assert_eq!(a, Some(&mut "bar"));
+		assert_eq!(b, Some(&mut "foo"));
 	}
 }

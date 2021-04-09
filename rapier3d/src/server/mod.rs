@@ -8,16 +8,16 @@ mod shape;
 mod space;
 
 use crate::area::Area;
-use crate::space::Space;
+use crate::body::Body;
 use crate::indices::Indices;
+use crate::space::Space;
 use crate::*;
-pub use body::Body;
 use core::num::NonZeroU32;
 use gdnative::godot_error;
 pub use index::*;
 use joint::Joint;
 use rapier3d::na;
-use shape::Shape;
+pub use shape::Shape;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 lazy_static::lazy_static! {

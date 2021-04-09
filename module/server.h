@@ -23,6 +23,12 @@
 } while (0)
 
 
+#define EXEC_V_FFI_FN(_v_, _server_, _fn_, ...) do { \
+	ERR_FAIL_COND_V_MSG((_server_)->fn_table._fn_ == nullptr, _v_, "Not implemented"); \
+	(*(_server_)->fn_table._fn_)(__VA_ARGS__); \
+} while (0)
+
+
 class PluggablePhysicsRID_Data : public RID_Data {
 	friend class PluggablePhysicsServer;
 	index_t index;

@@ -1,10 +1,10 @@
 use crate::area::Area;
-use crate::server;
-use crate::server::Body;
-use crate::server::{AreaIndex, BodyIndex, MapIndex, SpaceIndex};
+use crate::body;
+use crate::server::{AreaIndex, BodyIndex, MapIndex, ShapeIndex, SpaceIndex};
 use crate::util::*;
+use core::convert::TryFrom;
 use gdnative::prelude::*;
-use rapier3d::crossbeam::channel::{self, Receiver};
+use rapier3d::crossbeam::channel::{self, Receiver, Sender};
 use rapier3d::dynamics::{
 	CCDSolver, IntegrationParameters, Joint, JointHandle, JointParams, JointSet, RigidBody,
 	RigidBodyHandle, RigidBodySet,
@@ -15,8 +15,8 @@ use rapier3d::geometry::{
 };
 use rapier3d::na::Point3;
 use rapier3d::pipeline::{
-	ChannelEventCollector, ContactModificationContext, PairFilterContext, PhysicsHooks,
-	PhysicsHooksFlags, PhysicsPipeline, QueryPipeline,
+	ContactModificationContext, EventHandler, PairFilterContext, PhysicsHooks, PhysicsHooksFlags,
+	PhysicsPipeline, QueryPipeline,
 };
 use std::collections::BTreeMap;
 
@@ -41,9 +41,9 @@ pub struct Space {
 	ccd_solver: CCDSolver,
 
 	body_exclusions: BodyExclusionHooks,
-	event_handler: ChannelEventCollector,
-	contact_recv: Receiver<ContactEvent>,
+	event_handler: IntersectionEventCollector,
 	intersection_recv: Receiver<IntersectionEvent>,
+	contact_recv: Receiver<(BodyIndex, body::ContactEvent)>,
 
 	area_map: BTreeMap<i32, Vec<RigidBodyHandle>>,
 
@@ -62,12 +62,17 @@ struct BodyExclusionHooks {
 	// * SparseVec is likely densely packed -> not many "holes" in the Vec.
 	// * Amount of body exclusions is likely small -> Vec is compact and maybe faster.
 	exclusions: Vec<Vec<BodyIndex>>,
+	contacts_sender: Sender<(BodyIndex, body::ContactEvent)>,
+}
+
+struct IntersectionEventCollector {
+	sender: Sender<IntersectionEvent>,
 }
 
 impl Space {
 	pub fn new() -> Self {
-		let (contact_send, contact_recv) = channel::unbounded();
 		let (intersection_send, intersection_recv) = channel::unbounded();
+		let (contact_send, contact_recv) = channel::unbounded();
 		Space {
 			physics_pipeline: PhysicsPipeline::new(),
 			query_pipeline: QueryPipeline::new(),
@@ -79,8 +84,10 @@ impl Space {
 			colliders: ColliderSet::new(),
 			joints: JointSet::new(),
 			ccd_solver: CCDSolver::new(),
-			body_exclusions: BodyExclusionHooks::new(),
-			event_handler: ChannelEventCollector::new(intersection_send, contact_send),
+			body_exclusions: BodyExclusionHooks::new(contact_send),
+			event_handler: IntersectionEventCollector {
+				sender: intersection_send,
+			},
 			intersection_recv,
 			contact_recv,
 			query_pipeline_out_of_date: false,
@@ -95,6 +102,19 @@ impl Space {
 	}
 
 	pub fn step(&mut self, delta: f32) {
+		let mut areas = AreaIndex::write_all();
+		let mut bodies = BodyIndex::write_all();
+		let mut shapes = ShapeIndex::write_all();
+
+		// Update rigidbodies with stale state
+		for rb in self.bodies.iter_mut() {
+			if let Ok(body) = body::RigidBodyUserdata::try_from(&*rb.1) {
+				let body = bodies.get_mut(body.into()).expect("Invalid body index");
+				body.refresh_state(rb.1, &mut shapes);
+			}
+		}
+
+		// Step
 		self.integration_parameters.dt = delta;
 		self.physics_pipeline.step(
 			&vec_gd_to_na(self.gravity),
@@ -110,9 +130,6 @@ impl Space {
 		);
 		self.query_pipeline_out_of_date = true;
 
-		let mut areas = AreaIndex::write_all();
-		let mut bodies = BodyIndex::write_all();
-
 		// Clear area events
 		let mut remove = Vec::new();
 		for (&prio, vec) in self.area_map.iter() {
@@ -120,9 +137,7 @@ impl Space {
 			for (i, &area) in vec.iter().enumerate() {
 				if let Some(area) = self.bodies.get(area) {
 					let area = Area::get_rigidbody_userdata(area).expect("Invalid area userdata");
-					let area = areas
-						.get_mut(area.into())
-						.expect("Invalid area index");
+					let area = areas.get_mut(area.into()).expect("Invalid area index");
 					area.clear_events();
 				} else {
 					// u32 is slightly more efficient and cannot be exceeded anyways, as AreaIndex
@@ -152,8 +167,7 @@ impl Space {
 			let b = &self.colliders[event.collider2];
 			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
 				if let Some(b) = Area::get_collider_userdata(b) {
-					let (area_a, area_b) =
-						areas.get2_mut(a.into(), b.into());
+					let (area_a, area_b) = areas.get2_mut(a.into(), b.into());
 					let area_a = area_a.expect("Invalid area A index");
 					let area_b = area_b.expect("Invalid area B index");
 					if area_b.monitorable() {
@@ -164,44 +178,40 @@ impl Space {
 					}
 					continue;
 				} else {
-					(a, Body::get_shape_userdata(&b).0)
+					(a, body::ColliderUserdata::try_from(b).unwrap().index())
 				}
 			} else if let Some(b) = Area::get_collider_userdata(b) {
-				(b, Body::get_shape_userdata(&a).0)
+				(b, body::ColliderUserdata::try_from(a).unwrap().index())
 			} else {
 				// I suppose it makes sense to avoid poisoning the locks?
 				drop(areas);
 				drop(bodies);
 				panic!("Neither collider is an area");
 			};
-			let area = areas
-				.get_mut(area.into())
-				.expect("Invalid area index");
+			let area = areas.get_mut(area.into()).expect("Invalid area index");
 			area.push_body_event(body, event.intersecting);
 		}
 
-		// Process body contacts (TODO)
-		while self.contact_recv.try_recv().is_ok() {}
+		// Process body contacts
+		while let Ok((body, event)) = self.contact_recv.try_recv() {
+			bodies
+				.get_mut(body.into())
+				.expect("Invalid body index")
+				.add_contact(event);
+		}
 
 		// Register area space overrides to bodies
 		for &area in self.area_map.values().rev().flat_map(|v| v.iter()) {
 			let rb = &self.bodies[area];
 			let area = Area::get_rigidbody_userdata(rb).expect("Area body has invalid userdata");
-			let area = areas
-				.get_mut(area.into())
-				.expect("Invalid area index");
+			let area = areas.get_mut(area.into()).expect("Invalid area index");
 			area.apply_events(&rb, &mut bodies, &self.bodies);
 		}
 
 		// Apply space overrides to bodies
-		//for rb in self.bodies.iter_mut().map(|v| v.1) {
-		for (_, rb) in self.bodies.iter_mut() {
-			// FIXME *puke*
-			if Area::get_rigidbody_userdata(rb).is_none() {
-				let body = Body::get_index(rb);
-				let body = bodies
-					.get_mut(body.into())
-					.expect("Invalid body index");
+		for rb in self.bodies.iter_mut().map(|v| v.1) {
+			if let Ok(body) = body::RigidBodyUserdata::try_from(&*rb) {
+				let body = bodies.get_mut(body.into()).expect("Invalid body index");
 				body.apply_area_overrides(rb, self.default_linear_damp, self.default_angular_damp);
 			}
 		}
@@ -270,7 +280,6 @@ impl Space {
 
 	/// Make two bodies interact with each other again.
 	/// Returns `Ok` if the bodies did exclude each other, `Err` otherwise.
-	#[allow(dead_code)] // FIXME body_remove_collision_exception needs to be implemented
 	pub fn remove_body_exclusion(
 		&mut self,
 		index_a: BodyIndex,
@@ -334,7 +343,9 @@ impl Space {
 		let dir = to - from;
 		let (dir, max_toi) = (dir.normalize(), dir.length());
 		let filter = if !exclude.is_empty() {
-			Some(|_, c: &'_ _| !exclude.contains(&server::Body::get_shape_userdata(c).0))
+			Some(|_, c: &'_ _| {
+				!exclude.contains(&body::ColliderUserdata::try_from(c).unwrap().index())
+			})
 		} else {
 			None
 		};
@@ -354,12 +365,12 @@ impl Space {
 			let position = dir * intersection.toi + from; // MulAdd not implemented :(
 			let normal = vec_na_to_gd(intersection.normal);
 			let collider = self.colliders.get(collider).unwrap();
-			let (body, shape) = server::Body::get_shape_userdata(collider);
+			let c = body::ColliderUserdata::try_from(collider).unwrap();
 			RayCastResult {
 				position,
 				normal,
-				body,
-				shape,
+				body: c.index(),
+				shape: c.shape(),
 			}
 		})
 	}
@@ -403,12 +414,28 @@ impl Space {
 			.or_insert_with(Vec::new)
 			.push(area);
 	}
+
+	/// Returns a reference to a body if it exists
+	pub fn get_body(&self, body: RigidBodyHandle) -> Option<&RigidBody> {
+		self.bodies.get(body)
+	}
+
+	/// Returns a mutable reference to a body if it exists
+	pub fn get_body_mut(&mut self, body: RigidBodyHandle) -> Option<&mut RigidBody> {
+		self.bodies.get_mut(body)
+	}
+
+	/// Returns a mutable reference to a collider if it exists
+	pub fn get_collider_mut(&mut self, collider: ColliderHandle) -> Option<&mut Collider> {
+		self.colliders.get_mut(collider)
+	}
 }
 
 impl BodyExclusionHooks {
-	fn new() -> Self {
+	fn new(contacts_sender: Sender<(BodyIndex, body::ContactEvent)>) -> Self {
 		Self {
 			exclusions: Vec::<Vec<BodyIndex>>::new(),
+			contacts_sender,
 		}
 	}
 
@@ -455,30 +482,74 @@ impl BodyExclusionHooks {
 
 impl PhysicsHooks for BodyExclusionHooks {
 	fn active_hooks(&self) -> PhysicsHooksFlags {
-		PhysicsHooksFlags::FILTER_CONTACT_PAIR
+		PhysicsHooksFlags::FILTER_CONTACT_PAIR | PhysicsHooksFlags::MODIFY_SOLVER_CONTACTS
 	}
 
 	fn filter_contact_pair(&self, context: &PairFilterContext) -> Option<SolverFlags> {
-		let a = server::Body::get_index(context.rigid_body1);
-		let b = server::Body::get_index(context.rigid_body2);
-		let (a, b) = if a.index() < b.index() {
-			(a, b)
-		} else {
-			(b, a)
-		};
-		if let Some(indices) = self.exclusions.get(a.index() as usize) {
-			for &i in indices.iter() {
-				if i == b {
-					return None;
+		let mut monitor = false;
+		if let Ok(a) = body::RigidBodyUserdata::try_from(context.rigid_body1) {
+			if let Ok(b) = body::RigidBodyUserdata::try_from(context.rigid_body2) {
+				monitor = a.monitoring() || b.monitoring();
+				let (a, b) = (a.index(), b.index());
+				let (a, b) = if a.index() < b.index() {
+					(a, b)
+				} else {
+					(b, a)
+				};
+				if let Some(indices) = self.exclusions.get(a.index() as usize) {
+					for &i in indices.iter() {
+						if i == b {
+							return None;
+						}
+					}
 				}
 			}
 		}
-		Some(SolverFlags::default())
+		Some(if monitor {
+			SolverFlags::all()
+		} else {
+			SolverFlags::default()
+		})
 	}
 
 	fn filter_intersection_pair(&self, _: &PairFilterContext) -> bool {
 		false
 	}
 
-	fn modify_solver_contacts(&self, _: &mut ContactModificationContext) {}
+	fn modify_solver_contacts(&self, context: &mut ContactModificationContext) {
+		if let Ok(a) = body::ColliderUserdata::try_from(context.collider1) {
+			if let Ok(b) = body::ColliderUserdata::try_from(context.collider2) {
+				for c in context.solver_contacts.iter() {
+					if a.monitoring() {
+						let contact = body::ContactEvent::new(
+							vec_na_to_gd(c.point.coords),
+							b.index(),
+							b.shape(),
+							a.shape(),
+							vec_na_to_gd(*context.normal),
+						);
+						let _ = self.contacts_sender.try_send((a.index(), contact));
+					}
+					if b.monitoring() {
+						let contact = body::ContactEvent::new(
+							vec_na_to_gd(c.point.coords),
+							a.index(),
+							a.shape(),
+							b.shape(),
+							vec_na_to_gd(*context.normal),
+						);
+						let _ = self.contacts_sender.try_send((b.index(), contact));
+					}
+				}
+			}
+		}
+	}
+}
+
+impl EventHandler for IntersectionEventCollector {
+	fn handle_intersection_event(&self, event: IntersectionEvent) {
+		let _ = self.sender.try_send(event);
+	}
+
+	fn handle_contact_event(&self, _: ContactEvent) {}
 }

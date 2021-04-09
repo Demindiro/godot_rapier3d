@@ -19,10 +19,14 @@ class PluggablePhysicsDirectBodyState : public PhysicsDirectBodyState {
 	_FORCE_INLINE_ ~PluggablePhysicsDirectBodyState() {}
 
 	struct physics_body_state state;
-	index_t body;
+	mutable struct physics_body_contact contact;
 	PluggablePhysicsServer *server;
 	PluggablePhysicsDirectSpaceState *space_state_singleton;
+	index_t body;
 	real_t delta;
+	mutable uint32_t contact_index;
+
+	_FORCE_INLINE_ const struct physics_body_contact *_select_contact(int id) const;
 
 public:
 	virtual Vector3 get_total_gravity() const;

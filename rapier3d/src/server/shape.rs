@@ -44,6 +44,7 @@ impl Type {
 pub struct Shape {
 	r#type: Type,
 	shape: SharedShape,
+	index: Option<ShapeIndex>,
 }
 
 #[derive(Debug)]
@@ -94,7 +95,12 @@ impl Shape {
 				Matrix3x1::new(1.0, 1.0, 1.0),
 			),
 		};
-		Self { r#type, shape }
+		let index = None;
+		Self {
+			r#type,
+			shape,
+			index,
+		}
 	}
 
 	fn apply_data(&mut self, data: &Variant) -> Result<(), ShapeError> {
@@ -229,15 +235,39 @@ impl Shape {
 		godot_error!("TODO free shape");
 	}
 
-	/// Creates a new collider based on the given position and scale
-	pub fn build(&self, position: Isometry3<f32>, scale: Vector3, sensor: bool) -> Collider {
+	/// Creates a new shape based on the given position and scale
+	pub fn build_shape(&self, position: Isometry3<f32>, scale: Vector3) -> SharedShape {
 		let shape_scale = position.rotation * vec_gd_to_na(scale);
 		let shape_scale = vec_gd_to_na(scale).component_mul(&shape_scale);
 		let shape_scale = vec_na_to_gd(shape_scale);
-		ColliderBuilder::new(self.scaled(shape_scale))
+		self.scaled(shape_scale)
+	}
+
+	/// Creates a new collider based on the given position and scale
+	pub fn build(&self, position: Isometry3<f32>, scale: Vector3, sensor: bool) -> Collider {
+		ColliderBuilder::new(self.build_shape(position, scale))
 			.position_wrt_parent(position)
 			.sensor(sensor)
 			.build()
+	}
+
+	/// Sets the index of this shape
+	///
+	/// # Panics
+	///
+	/// Panics if the index is already set
+	pub fn set_index(&mut self, index: ShapeIndex) {
+		assert_eq!(self.index, None, "Index is already set");
+		self.index = Some(index);
+	}
+
+	/// Returns the index of this shape
+	///
+	/// # Panics
+	///
+	/// Panics if the index isn't set
+	pub fn index(&self) -> ShapeIndex {
+		self.index.expect("Index isn't set")
 	}
 }
 
@@ -257,7 +287,9 @@ fn create(shape: i32) -> Option<Index> {
 	match Type::new(shape) {
 		Ok(shape) => {
 			let shape = Shape::new(shape);
-			Some(Index::Shape(ShapeIndex::add(shape)))
+			let index = ShapeIndex::add(shape);
+			index.map_mut(|s| s.set_index(index)).unwrap();
+			Some(Index::Shape(index))
 		}
 		Err(e) => {
 			godot_error!("Invalid shape: {:?}", e);

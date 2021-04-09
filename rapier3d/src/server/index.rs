@@ -1,3 +1,5 @@
+use crate::indices;
+
 pub const AREA_ID: u8 = 1;
 pub const BODY_ID: u8 = 2;
 pub const JOINT_ID: u8 = 3;
@@ -151,23 +153,22 @@ macro_rules! generate {
 			}
 		}
 
-		impl Into<crate::indices::Index> for $index {
+		impl From<$index> for indices::Index {
 			/// Converts a [`$index`] into a [`Index`](crate::indices::Index)
-			fn into(self) -> crate::indices::Index {
-				crate::indices::Index::new(self.0, self.1)
+			fn from(index: $index) -> Self {
+				Self::new(index.0, index.1)
 			}
 		}
 
-		impl Into<crate::indices::Index> for &$index {
-			/// Converts a [`$index`] into a [`Index`](crate::indices::Index)
-			fn into(self) -> crate::indices::Index {
-				(*self).into()
+		impl From<&$index> for indices::Index {
+			fn from(index: &$index) -> Self {
+				(*index).into()
 			}
 		}
 
-		impl From<crate::indices::Index> for $index {
+		impl From<indices::Index> for $index {
 			/// Converts a [`$index`] into a [`Index`](crate::indices::Index)
-			fn from(index: crate::indices::Index) -> Self {
+			fn from(index: indices::Index) -> Self {
 				Self(index.index(), index.generation())
 			}
 		}
