@@ -1,5 +1,5 @@
 use super::*;
-use crate::body::{self, Body};
+use crate::body;
 use crate::util::*;
 use core::convert::TryFrom;
 use gdnative::core_types::*;

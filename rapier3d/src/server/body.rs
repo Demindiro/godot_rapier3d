@@ -2,14 +2,9 @@ use super::index::BodyIndex;
 use super::*;
 use crate::body::Body;
 use crate::util::*;
-use core::mem;
 use gdnative::core_types::*;
 use gdnative::{godot_error, godot_warn};
-use rapier3d::dynamics::{
-	ActivationStatus, BodyStatus, RigidBody, RigidBodyBuilder, RigidBodyHandle,
-};
-use rapier3d::math::Isometry;
-use rapier3d::na;
+use rapier3d::dynamics::{ActivationStatus, BodyStatus, RigidBody, RigidBodyBuilder};
 
 #[derive(Debug)]
 enum Type {
@@ -53,13 +48,6 @@ enum StateError {
 
 #[derive(Debug)]
 struct InvalidMode;
-
-struct Shape {
-	index: ShapeIndex,
-	transform: Isometry<f32>,
-	scale: Vector3,
-	enabled: bool,
-}
 
 impl Type {
 	fn new(n: i32) -> Result<Type, ()> {
@@ -251,6 +239,7 @@ fn get_contact(body: Index, id: u32, contact: &mut ffi::PhysicsBodyContact) {
 				contact.set_position(c.position());
 				contact.set_object_id(c.object_id());
 				contact.set_shape(c.other_shape());
+				contact.set_local_shape(c.self_shape());
 			});
 		} else {
 			godot_error!("Invalid contact");
@@ -264,7 +253,7 @@ fn remove_shape(body: Index, shape: i32) {
 }
 
 fn set_param(body: Index, param: i32, value: f32) {
-	let param = if let Ok(param) = Param::new(param, value) {
+	if let Ok(param) = Param::new(param, value) {
 		map_or_err!(body, map_body_mut, |body, _| {
 			match param {
 				Param::Mass(mass) => body.set_mass(mass),
@@ -322,7 +311,7 @@ fn set_omit_force_integration(body: Index, enable: bool) {
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |body, _| body
-		.set_shape_transform(shape, transform, true));
+		.set_shape_transform(shape, transform));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {

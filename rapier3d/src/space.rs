@@ -1,5 +1,5 @@
 use crate::area::Area;
-use crate::body::{self, Body};
+use crate::body;
 use crate::server::{AreaIndex, BodyIndex, MapIndex, ShapeIndex, SpaceIndex};
 use crate::util::*;
 use core::convert::TryFrom;
@@ -15,8 +15,8 @@ use rapier3d::geometry::{
 };
 use rapier3d::na::Point3;
 use rapier3d::pipeline::{
-	ChannelEventCollector, ContactModificationContext, EventHandler, PairFilterContext,
-	PhysicsHooks, PhysicsHooksFlags, PhysicsPipeline, QueryPipeline,
+	ContactModificationContext, EventHandler, PairFilterContext, PhysicsHooks, PhysicsHooksFlags,
+	PhysicsPipeline, QueryPipeline,
 };
 use std::collections::BTreeMap;
 

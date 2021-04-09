@@ -1,10 +1,10 @@
 use crate::area::Gravity;
+use crate::indices;
 use crate::indices::Indices;
 use crate::server::{BodyIndex, Instance, MapIndex, ObjectID, Shape, ShapeIndex, SpaceIndex};
 use crate::space::Space;
 use crate::util::*;
 use core::convert::{TryFrom, TryInto};
-use core::mem;
 use gdnative::core_types::*;
 use rapier3d::dynamics::{BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet};
 use rapier3d::geometry::{
@@ -43,6 +43,7 @@ pub struct Body {
 
 	exclusions: Vec<BodyIndex>,
 	collision_groups: InteractionGroups,
+	#[allow(dead_code)]
 	ray_pickable: bool,
 
 	linear_damp: f32,
@@ -50,10 +51,7 @@ pub struct Body {
 	restitution: f32,
 	friction: f32,
 
-	transform_stale: bool,
 	inertia_stale: bool,
-
-	omit_force_integration: bool,
 
 	area_gravity: Option<Vector3>,
 	area_linear_damp: Option<(f32, u32)>,
@@ -90,10 +88,7 @@ impl Body {
 			restitution: 0.0,
 			friction: 1.0,
 
-			transform_stale: false,
 			inertia_stale: false,
-
-			omit_force_integration: false,
 
 			area_gravity: None,
 			area_linear_damp: None,
@@ -178,7 +173,7 @@ impl Body {
 						let shape_scale = iso.rotation * vec_gd_to_na(scl);
 						let shape_scale = vec_gd_to_na(self_scale).component_mul(&shape_scale);
 						let shape_scale = vec_na_to_gd(shape_scale);
-						let collider = shape.build(body_shape.transform, scl, false);
+						let collider = shape.build(body_shape.transform, shape_scale, false);
 						let collider = space.add_collider(collider, *rb);
 						colliders.push(Some(collider));
 					})
@@ -596,13 +591,12 @@ impl Body {
 		&mut self,
 		shape: u32,
 		transform: &Transform,
-		scale: bool,
 	) -> Result<(), InvalidShape> {
 		if let Some(shp) = self.shapes.get_mut(shape as usize) {
 			let (iso, scl) = transform_to_isometry_and_scale(transform);
 			shp.transform = iso;
 			shp.scale = scl;
-			if let Instance::Attached((body, colliders), space) = &self.body {
+			if let Instance::Attached((_, colliders), space) = &self.body {
 				if let Some(collider) = colliders[shape as usize] {
 					let shape_scale = iso.rotation * vec_gd_to_na(shp.scale);
 					let shape_scale = vec_gd_to_na(self.scale).component_mul(&shape_scale);
@@ -640,7 +634,6 @@ impl Body {
 
 	/// Sets whether to clear any external forces such as gravity
 	pub fn set_omit_force_integration(&mut self, enable: bool) {
-		self.omit_force_integration = enable;
 		let g_scale = if enable { 0.0 } else { 1.0 };
 		match &mut self.body {
 			Instance::Attached((rb, _), space) => {
@@ -850,10 +843,10 @@ impl ContactEvent {
 }
 
 impl RigidBodyUserdata {
-	const TYPE_MASK: u128 = 0x8000_0000_00000000;
-	const MONITORING_MASK: u128 = 0x0001_0000_00000000;
+	const TYPE_MASK: u128 = 0x8000_0000_0000_0000;
+	const MONITORING_MASK: u128 = 0x0001_0000_0000_0000;
 	#[allow(dead_code)]
-	const INDEX_MASK: u128 = 0x0000_ffff_ffffffff;
+	const INDEX_MASK: u128 = 0x0000_ffff_ffff_ffff;
 
 	/// Creates a new userdata intended for rigidbodies. This data is marked to ensure it can
 	/// be identified as belonging to a [`Body`].
@@ -922,24 +915,24 @@ impl TryFrom<&RigidBody> for RigidBodyUserdata {
 	}
 }
 
-impl Into<crate::indices::Index> for RigidBodyUserdata {
-	fn into(self) -> crate::indices::Index {
-		self.index().into()
+impl From<RigidBodyUserdata> for indices::Index {
+	fn from(ud: RigidBodyUserdata) -> Self {
+		ud.index().into()
 	}
 }
 
-impl Into<u128> for RigidBodyUserdata {
-	fn into(self) -> u128 {
-		self.0
+impl From<RigidBodyUserdata> for u128 {
+	fn from(ud: RigidBodyUserdata) -> Self {
+		ud.0
 	}
 }
 
 impl ColliderUserdata {
-	const TYPE_MASK: u128 = 0x00000000_8000_0000_00000000;
-	const MONITORING_MASK: u128 = 0x00000000_0001_0000_00000000;
+	const TYPE_MASK: u128 = 0x0000_0000_8000_0000_0000_0000;
+	const MONITORING_MASK: u128 = 0x0000_0000_0001_0000_0000_0000;
 	#[allow(dead_code)]
-	const INDEX_MASK: u128 = 0x00000000_0000_ffff_ffffffff;
-	const SHAPE_INDEX_MASK: u128 = 0xffffffff_0000_0000_00000000;
+	const INDEX_MASK: u128 = 0x0000_0000_0000_ffff_ffff_ffff;
+	const SHAPE_INDEX_MASK: u128 = 0xffff_ffff_0000_0000_0000_0000;
 
 	/// Creates a new userdata intended for [`Collider`]s. This data is marked to ensure it can
 	/// be identified as belonging to a [`Body`].
@@ -1020,14 +1013,14 @@ impl TryFrom<&Collider> for ColliderUserdata {
 	}
 }
 
-impl Into<crate::indices::Index> for ColliderUserdata {
-	fn into(self) -> crate::indices::Index {
-		self.index().into()
+impl From<ColliderUserdata> for crate::indices::Index {
+	fn from(ud: ColliderUserdata) -> Self {
+		ud.index().into()
 	}
 }
 
-impl Into<u128> for ColliderUserdata {
-	fn into(self) -> u128 {
-		self.0
+impl From<ColliderUserdata> for u128 {
+	fn from(ud: ColliderUserdata) -> Self {
+		ud.0
 	}
 }
