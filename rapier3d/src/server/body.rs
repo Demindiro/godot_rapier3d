@@ -3,7 +3,7 @@ use super::*;
 use crate::body::Body;
 use crate::util::*;
 use gdnative::core_types::*;
-use gdnative::{godot_error, godot_warn};
+use gdnative::godot_error;
 use rapier3d::dynamics::{ActivationStatus, BodyStatus, RigidBody, RigidBodyBuilder};
 
 #[derive(Debug)]
@@ -117,18 +117,40 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, body_add_shape, add_shape);
 	ffi!(ffi, body_add_collision_exception, add_collision_exception);
 	ffi!(ffi, body_apply_impulse, apply_impulse);
-	ffi!(ffi, body_attach_object_instance_id, attach_object_instance_id);
+	ffi!(
+		ffi,
+		body_attach_object_instance_id,
+		attach_object_instance_id
+	);
 	ffi!(ffi, body_create, create);
+	ffi!(
+		ffi,
+		body_is_continuous_collision_detection_enabled,
+		is_continuous_collision_detection_enabled
+	);
 	ffi!(ffi, body_get_contact, get_contact);
 	ffi!(ffi, body_get_direct_state, get_direct_state);
 	ffi!(ffi, body_get_kinematic_safe_margin, |_| 0.0);
 	ffi!(ffi, body_remove_shape, remove_shape);
 	ffi!(ffi, body_set_collision_layer, set_collision_layer);
 	ffi!(ffi, body_set_collision_mask, set_collision_mask);
+	ffi!(
+		ffi,
+		body_set_enable_continuous_collision_detection,
+		set_enable_continuous_collision_detection
+	);
 	ffi!(ffi, body_set_kinematic_safe_margin, |_, _| ());
-	ffi!(ffi, body_set_max_contacts_reported, set_max_contacts_reported);
+	ffi!(
+		ffi,
+		body_set_max_contacts_reported,
+		set_max_contacts_reported
+	);
 	ffi!(ffi, body_set_mode, set_mode);
-	ffi!(ffi, body_set_omit_force_integration, set_omit_force_integration);
+	ffi!(
+		ffi,
+		body_set_omit_force_integration,
+		set_omit_force_integration
+	);
 	ffi!(ffi, body_set_param, set_param);
 	ffi!(ffi, body_set_shape_transform, set_shape_transform);
 	ffi!(ffi, body_set_shape_disabled, set_shape_disabled);
@@ -270,19 +292,11 @@ fn set_param(body: Index, param: i32, value: f32) {
 }
 
 fn set_collision_layer(body: Index, layer: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((layer >> 16) & 0xf) != 0 && ((layer >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(body, map_body_mut, |body, _| body.set_groups(layer as u16));
+	map_or_err!(body, map_body_mut, |body, _| body.set_groups(layer));
 }
 
 fn set_collision_mask(body: Index, mask: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((mask >> 16) & 0xf) != 0 && ((mask >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(body, map_body_mut, |body, _| body.set_mask(mask as u16));
+	map_or_err!(body, map_body_mut, |body, _| body.set_mask(mask));
 }
 
 fn set_mode(body: Index, mode: i32) {
@@ -355,6 +369,14 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 fn set_max_contacts_reported(body: Index, count: i32) {
 	let count = count as u32;
 	map_or_err!(body, map_body_mut, |body, _| body.set_max_contacts(count));
+}
+
+fn is_continuous_collision_detection_enabled(body: Index) -> bool {
+	map_or_err!(body, map_body, |body, _| body.is_ccd_enabled()).unwrap_or(false)
+}
+
+fn set_enable_continuous_collision_detection(body: Index, enable: bool) {
+	map_or_err!(body, map_body_mut, |body, _| body.enable_ccd(enable));
 }
 
 /// Godot's "It's local position but global rotation" is such a mindfuck that this function exists

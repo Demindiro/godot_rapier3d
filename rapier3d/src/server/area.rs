@@ -44,7 +44,11 @@ impl Param {
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, area_add_shape, add_shape);
-	ffi!(ffi, area_attach_object_instance_id, attach_object_instance_id);
+	ffi!(
+		ffi,
+		area_attach_object_instance_id,
+		attach_object_instance_id
+	);
 	ffi!(ffi, area_clear_shapes, clear_shapes);
 	ffi!(ffi, area_create, create);
 	ffi!(ffi, area_get_area_event, get_area_event);
@@ -298,19 +302,11 @@ fn set_ray_pickable(area: Index, enable: bool) {
 }
 
 fn set_collision_mask(area: Index, mask: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((mask >> 16) & 0xf) != 0 && ((mask >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(area, map_area_mut, |area, _| area.set_mask(mask as u16));
+	map_or_err!(area, map_area_mut, |area, _| area.set_mask(mask));
 }
 
 fn set_collision_layer(area: Index, layer: u32) {
-	// Check if bits 16-20 are intentionally toggled by the user
-	if ((layer >> 16) & 0xf) != 0 && ((layer >> 16) & 0xf) != 0xf {
-		godot_warn!("Rapier3D only supports 16 bit collision groups. Don't use the upper 16 bits");
-	}
-	map_or_err!(area, map_area_mut, |area, _| area.set_layer(layer as u16));
+	map_or_err!(area, map_area_mut, |area, _| area.set_layer(layer));
 }
 
 fn get_area_event(area: Index, event: &mut ffi::PhysicsAreaMonitorEvent) -> bool {

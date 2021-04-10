@@ -126,7 +126,11 @@ impl HingeFlag {
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, joint_create_hinge, create_hinge);
-	ffi!(ffi, joint_disable_collisions_between_bodies, disable_collisions_between_bodies);
+	ffi!(
+		ffi,
+		joint_disable_collisions_between_bodies,
+		disable_collisions_between_bodies
+	);
 	ffi!(ffi, joint_get_solver_priority, |_| 0);
 	ffi!(ffi, joint_set_solver_priority, |_, _| {});
 	ffi!(ffi, hinge_joint_set_flag, set_hinge_flag);

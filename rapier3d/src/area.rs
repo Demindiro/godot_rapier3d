@@ -387,12 +387,12 @@ impl Area {
 	}
 
 	/// Sets the collision layer of this area
-	pub fn set_layer(&mut self, layer: u16) {
+	pub fn set_layer(&mut self, layer: u32) {
 		self.interaction_groups = self.interaction_groups.with_groups(layer);
 	}
 
 	/// Sets the collision masj of this area
-	pub fn set_mask(&mut self, mask: u16) {
+	pub fn set_mask(&mut self, mask: u32) {
 		self.interaction_groups = self.interaction_groups.with_mask(mask);
 	}
 

@@ -671,8 +671,7 @@ dependencies = [
 [[package]]
 name = "rapier3d"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15a3ca6b0c27b2ef976a98dc1437f34d7128ad53370bc671dd1261d05bb472d1"
+source = "git+https://github.com/Demindiro/rapier?branch=interaction-groups-or#64fc83c752cd0f5f324c32e26c8d90d4ed6a0f22"
 dependencies = [
  "approx",
  "arrayvec",
