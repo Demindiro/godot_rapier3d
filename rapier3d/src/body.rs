@@ -244,7 +244,7 @@ impl Body {
 					.friction(self.friction)
 					.build();
 				collider.user_data =
-					ColliderUserdata::new(index, self.max_contacts > 0, i as u32).into();
+					ColliderUserdata::new(index, self.max_contacts > 0, self.ray_pickable, i as u32).into();
 				colliders.push(Some(collider));
 			} else {
 				colliders.push(None);
@@ -518,6 +518,11 @@ impl Body {
 	/// Sets whether this body can be picked up by raycasts.
 	pub fn set_ray_pickable(&mut self, pickable: bool) {
 		self.ray_pickable = pickable;
+		self.map_colliders(|collider| {
+			let mut ud = ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
+			ud.set_ray_pickable(pickable);
+			collider.user_data = ud.into();
+		})
 	}
 
 	// TODO get rid of this ugly thing and return some state struct instead
@@ -940,6 +945,7 @@ impl From<RigidBodyUserdata> for u128 {
 impl ColliderUserdata {
 	const TYPE_MASK: u128 = 0x0000_0000_8000_0000_0000_0000;
 	const MONITORING_MASK: u128 = 0x0000_0000_0001_0000_0000_0000;
+	const RAY_PICKABLE_MASK: u128 = 0x0000_0000_0002_0000_0000_0000;
 	#[allow(dead_code)]
 	const INDEX_MASK: u128 = 0x0000_0000_0000_ffff_ffff_ffff;
 	const SHAPE_INDEX_MASK: u128 = 0xffff_ffff_0000_0000_0000_0000;
@@ -954,13 +960,15 @@ impl ColliderUserdata {
 	/// - 32 bits for index
 	/// - 16 bits for generation
 	/// - 1 bit for monitoring
-	/// - 14 bits reserved
+	/// - 1 bit for ray pickable
+	/// - 13 bits reserved
 	/// - 1 bit body type indicator (always `0` for [`Body`])
 	/// - 32 bits for shape index
-	fn new(index: BodyIndex, monitoring: bool, shape: u32) -> Self {
+	fn new(index: BodyIndex, monitoring: bool, ray_pickable: bool, shape: u32) -> Self {
 		let mut s = Self(0);
 		s.set_index(index);
 		s.set_monitoring(monitoring);
+		s.set_ray_pickable(ray_pickable);
 		s.set_shape(shape);
 		s
 	}
@@ -976,6 +984,15 @@ impl ColliderUserdata {
 			self.0 | Self::MONITORING_MASK
 		} else {
 			self.0 & !Self::MONITORING_MASK
+		};
+	}
+
+	/// Sets whether this body can be picked up by ray casts
+	fn set_ray_pickable(&mut self, pickable: bool) {
+		self.0 = if pickable {
+			self.0 | Self::RAY_PICKABLE_MASK
+		} else {
+			self.0 & !Self::RAY_PICKABLE_MASK
 		};
 	}
 
@@ -995,6 +1012,11 @@ impl ColliderUserdata {
 	/// Returns whether the body is monitoring for contacts
 	pub fn monitoring(&self) -> bool {
 		self.0 & Self::MONITORING_MASK > 0
+	}
+
+	/// Returns whether this body can be picked up by ray casts
+	pub fn ray_pickable(&self) -> bool {
+		self.0 & Self::RAY_PICKABLE_MASK > 0
 	}
 
 	/// Returns the index of the [`Collider`] in it's corresponding [`Body`]

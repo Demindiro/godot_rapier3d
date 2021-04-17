@@ -1,11 +1,12 @@
 use crate::body::Body;
-use crate::indices::Indices;
+use crate::indices::{self, Indices};
 use crate::server::{
-	AreaIndex, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex, AREA_ID,
+	AreaIndex, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex,
 };
 use crate::util::*;
 use core::mem;
 use gdnative::core_types::*;
+use core::convert::{TryFrom, TryInto};
 use rapier3d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet};
 use rapier3d::geometry::{Collider, ColliderHandle, InteractionGroups};
 use rapier3d::na::{Isometry3, Point3};
@@ -69,6 +70,12 @@ pub struct PointGravity {
 	distance_scale: f32,
 }
 
+pub struct RigidbodyUserdata(u128);
+pub struct ColliderUserdata(u128);
+
+#[derive(Debug)]
+pub struct UserdataMismatch;
+
 impl Area {
 	/// Creates a new Area
 	pub fn new() -> Self {
@@ -98,6 +105,38 @@ impl Area {
 		}
 	}
 
+	/// Calls the given function with a reference to this body's [`RigidBody`].
+	fn map_rigidbody_mut<F, R>(&mut self, f: F) -> R
+	where
+		F: FnOnce(&mut RigidBody) -> R,
+	{
+		match &mut self.instance {
+			Instance::Attached((body, _), space) => space
+				.map_mut(|space| f(space.get_body_mut(*body).expect("Invalid body handle")))
+				.expect("Invalid space handle"),
+			Instance::Loose(body) => f(body),
+		}
+	}
+
+	/// Calls the given function on all of the colliders of this body, if any.
+	fn map_colliders<F>(&mut self, mut f: F)
+	where
+		F: FnMut(&mut Collider),
+	{
+		if let Instance::Attached((_, ch), space) = &mut self.instance {
+			space
+				.map_mut(|space| {
+					for ch in ch.iter().filter_map(Option::as_ref) {
+						f(space
+							.colliders_mut()
+							.get_mut(*ch)
+							.expect("Invalid collider handle"));
+					}
+				})
+				.expect("Invalid space handle");
+		}
+	}
+
 	/// Sets the index of the area
 	///
 	/// # Panics
@@ -108,7 +147,7 @@ impl Area {
 		self.index = Some(index);
 		match &mut self.instance {
 			Instance::Attached(_, _) => todo!(),
-			Instance::Loose(b) => Self::set_rigidbody_userdata(index, b),
+			Instance::Loose(b) => Self::set_rigidbody_userdata(index, b, self.monitorable),
 		}
 	}
 
@@ -337,6 +376,11 @@ impl Area {
 	/// Sets whether this area can be monitored by other areas
 	pub fn set_monitorable(&mut self, enable: bool) {
 		self.monitorable = enable;
+		self.map_rigidbody_mut(|body| {
+			let mut ud = RigidbodyUserdata::try_from(body.user_data).expect("Invalid user data");
+			ud.set_monitorable(enable);
+			body.user_data = ud.into();
+		});
 	}
 
 	/// Returns the transform of this area
@@ -384,6 +428,11 @@ impl Area {
 	/// Sets whether this area can be detected by raycasts
 	pub fn set_ray_pickable(&mut self, enable: bool) {
 		self.ray_pickable = enable;
+		self.map_colliders(|collider| {
+			let mut ud = ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
+			ud.set_ray_pickable(enable);
+			collider.user_data = ud.into();
+		});
 	}
 
 	/// Sets the collision layer of this area
@@ -398,15 +447,12 @@ impl Area {
 
 	/// Stores the area's index in the given [`Collider`]
 	fn set_collider_userdata(&self, collider: &mut Collider) {
-		let index = self.index();
-		collider.user_data =
-			(index.index() as u128) | (index.generation() as u128) << 32 | (AREA_ID as u128) << 48;
+		collider.user_data = ColliderUserdata::new(self.index(), self.monitorable, self.ray_pickable, u32::MAX).into();
 	}
 
 	/// Stores the area's index in the given [`RigidBody`]
-	fn set_rigidbody_userdata(index: AreaIndex, body: &mut RigidBody) {
-		body.user_data =
-			(index.index() as u128) | (index.generation() as u128) << 32 | (AREA_ID as u128) << 48;
+	fn set_rigidbody_userdata(index: AreaIndex, body: &mut RigidBody, monitorable: bool) {
+		body.user_data = RigidbodyUserdata::new(index, monitorable).into();
 	}
 
 	/// Retrieves the area's index from a collider
@@ -414,15 +460,8 @@ impl Area {
 	/// # Returns
 	///
 	/// The [`AreaIndex`] if found, otherwise [`None`]
-	pub fn get_collider_userdata(collider: &Collider) -> Option<AreaIndex> {
-		let id = (collider.user_data >> 48) as u8;
-		if id == AREA_ID {
-			let index = collider.user_data as u32;
-			let generation = (collider.user_data >> 32) as u16;
-			Some(AreaIndex::new(index, generation))
-		} else {
-			None
-		}
+	pub fn get_collider_userdata(collider: &Collider) -> Option<ColliderUserdata> {
+		ColliderUserdata::try_from(collider.user_data).ok()
 	}
 
 	/// Retrieves the area's index from a [`RigidBody`]
@@ -430,15 +469,8 @@ impl Area {
 	/// # Returns
 	///
 	/// The [`AreaIndex`] if found, otherwise [`None`]
-	pub fn get_rigidbody_userdata(body: &RigidBody) -> Option<AreaIndex> {
-		let id = (body.user_data >> 48) as u8;
-		if id == AREA_ID {
-			let index = body.user_data as u32;
-			let generation = (body.user_data >> 32) as u16;
-			Some(AreaIndex::new(index, generation))
-		} else {
-			None
-		}
+	pub fn get_rigidbody_userdata(body: &RigidBody) -> Option<RigidbodyUserdata> {
+		RigidbodyUserdata::try_from(body.user_data).ok()
 	}
 
 	/// Clears all intersection events. This is necessary in case nothing is popping events
@@ -535,5 +567,206 @@ impl PointGravity {
 
 	pub fn distance_scale(&self) -> f32 {
 		self.distance_scale
+	}
+}
+
+impl RigidbodyUserdata {
+	const TYPE_MASK: u128 = 0x8000_0000_0000_0000;
+	const MONITORABLE_MASK: u128 = 0x0001_0000_0000_0000;
+	#[allow(dead_code)]
+	const INDEX_MASK: u128 = 0x0000_ffff_ffff_ffff;
+
+	/// Creates a new userdata intended for rigidbodies. This data is marked to ensure it can
+	/// be identified as belonging to a [`Body`].
+	///
+	/// The data fits entirely within the lower 64 bits of a u128, so the upper 64 bits can be
+	/// used for other purposes
+	///
+	/// The exact format from right to left is:
+	/// - 32 bits for index
+	/// - 16 bits for generation
+	/// - 1 bit for monitorable
+	/// - 14 bits reserved
+	/// - 1 bit body type indicator (always `1` for [`Area`])
+	fn new(index: AreaIndex, monitorable: bool) -> Self {
+		let mut s = Self(Self::TYPE_MASK);
+		s.set_index(index);
+		s.set_monitorable(monitorable);
+		s
+	}
+
+	/// Stores an index
+	fn set_index(&mut self, index: AreaIndex) {
+		self.0 &= !Self::INDEX_MASK;
+		self.0 |= index.index() as u128 | (index.generation() as u128) << 32;
+	}
+
+	/// Sets whether this area can be monitored by other areas
+	fn set_monitorable(&mut self, monitorable: bool) {
+		self.0 = if monitorable {
+			self.0 | Self::MONITORABLE_MASK
+		} else {
+			self.0 & !Self::MONITORABLE_MASK
+		};
+	}
+
+	/// Returns the index of the area
+	pub fn index(&self) -> AreaIndex {
+		let i = self.0 as u32;
+		let g = (self.0 >> 32) as u16;
+		AreaIndex::new(i, g)
+	}
+
+	/// Returns whether this area can be monitored ny other areas
+	pub fn monitorable(&self) -> bool {
+		self.0 & Self::MONITORABLE_MASK > 0
+	}
+}
+
+impl TryFrom<u128> for RigidbodyUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(n: u128) -> Result<Self, Self::Error> {
+		if n & Self::TYPE_MASK > 0 {
+			Ok(Self(n))
+		} else {
+			Err(UserdataMismatch)
+		}
+	}
+}
+
+impl TryFrom<&RigidBody> for RigidbodyUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(body: &RigidBody) -> Result<Self, Self::Error> {
+		body.user_data.try_into()
+	}
+}
+
+impl From<RigidbodyUserdata> for indices::Index {
+	fn from(ud: RigidbodyUserdata) -> Self {
+		ud.index().into()
+	}
+}
+
+impl From<RigidbodyUserdata> for u128 {
+	fn from(ud: RigidbodyUserdata) -> Self {
+		ud.0
+	}
+}
+
+
+impl ColliderUserdata {
+	const TYPE_MASK: u128 = 0x0000_0000_8000_0000_0000_0000;
+	const MONITORABLE_MASK: u128 = 0x0000_0000_0001_0000_0000_0000;
+	const RAY_PICKABLE_MASK: u128 = 0x0000_0000_0002_0000_0000_0000;
+	#[allow(dead_code)]
+	const INDEX_MASK: u128 = 0x0000_0000_0000_ffff_ffff_ffff;
+	const SHAPE_INDEX_MASK: u128 = 0xffff_ffff_0000_0000_0000_0000;
+
+	/// Creates a new userdata intended for [`Collider`]s. This data is marked to ensure it can
+	/// be identified as belonging to a [`Body`].
+	///
+	/// The data fits entirely within the lower 96 bits of a u128, so the upper 32 bits can be
+	/// used for other purposes
+	///
+	/// The exact format from right to left is:
+	/// - 32 bits for index
+	/// - 16 bits for generation
+	/// - 1 bit for monitorable
+	/// - 1 bit for ray pickable
+	/// - 13 bits reserved
+	/// - 1 bit body type indicator (always `1` for [`Area`])
+	/// - 32 bits for shape index
+	fn new(index: AreaIndex, monitorable: bool, ray_pickable: bool, shape: u32) -> Self {
+		let mut s = Self(Self::TYPE_MASK);
+		s.set_index(index);
+		s.set_monitorable(monitorable);
+		s.set_ray_pickable(ray_pickable);
+		s.set_shape(shape);
+		s
+	}
+
+	/// Stores an index
+	fn set_index(&mut self, index: AreaIndex) {
+		self.0 = self.0 | index.index() as u128 | (index.generation() as u128) << 32;
+	}
+
+	/// Sets whether this area can be monitored by other areas
+	fn set_monitorable(&mut self, monitorable: bool) {
+		self.0 = if monitorable {
+			self.0 | Self::MONITORABLE_MASK
+		} else {
+			self.0 & !Self::MONITORABLE_MASK
+		};
+	}
+
+	/// Sets whether this body can be picked up by ray casts
+	fn set_ray_pickable(&mut self, pickable: bool) {
+		self.0 = if pickable {
+			self.0 | Self::RAY_PICKABLE_MASK
+		} else {
+			self.0 & !Self::RAY_PICKABLE_MASK
+		};
+	}
+
+	/// Stores the index of the [`Collider`] in it's corresponding [`Body`]
+	fn set_shape(&mut self, index: u32) {
+		self.0 &= !Self::SHAPE_INDEX_MASK;
+		self.0 |= (index as u128) << 64;
+	}
+
+	/// Returns the index of the body
+	pub fn index(&self) -> AreaIndex {
+		let i = self.0 as u32;
+		let g = (self.0 >> 32) as u16;
+		AreaIndex::new(i, g)
+	}
+
+	/// Returns whether this area can be monitored by other areas
+	pub fn monitorable(&self) -> bool {
+		self.0 & Self::MONITORABLE_MASK > 0
+	}
+
+	/// Returns whether this body can be picked up by ray casts
+	pub fn ray_pickable(&self) -> bool {
+		self.0 & Self::RAY_PICKABLE_MASK > 0
+	}
+
+	/// Returns the index of the [`Collider`] in it's corresponding [`Body`]
+	pub fn shape(&self) -> u32 {
+		(self.0 >> 64) as u32
+	}
+}
+
+impl TryFrom<u128> for ColliderUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(n: u128) -> Result<Self, Self::Error> {
+		if n & Self::TYPE_MASK > 0 {
+			Ok(Self(n))
+		} else {
+			Err(UserdataMismatch)
+		}
+	}
+}
+
+impl TryFrom<&Collider> for ColliderUserdata {
+	type Error = UserdataMismatch;
+
+	fn try_from(body: &Collider) -> Result<Self, Self::Error> {
+		body.user_data.try_into()
+	}
+}
+
+impl From<ColliderUserdata> for indices::Index {
+	fn from(ud: ColliderUserdata) -> Self {
+		ud.index().into()
+	}
+}
+
+impl From<ColliderUserdata> for u128 {
+	fn from(ud: ColliderUserdata) -> Self {
+		ud.0
 	}
 }

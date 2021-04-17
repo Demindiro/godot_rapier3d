@@ -1,5 +1,5 @@
 use crate::area::Area;
-use crate::body;
+use crate::{body, area};
 use crate::server::{AreaIndex, BodyIndex, MapIndex, ShapeIndex, SpaceIndex};
 use crate::util::*;
 use core::convert::TryFrom;
@@ -50,10 +50,15 @@ pub struct Space {
 	index: Option<SpaceIndex>,
 }
 
+pub enum BodyOrAreaIndex {
+	Body(BodyIndex),
+	Area(AreaIndex),
+}
+
 pub struct RayCastResult {
 	pub position: Vector3,
 	pub normal: Vector3,
-	pub body: BodyIndex,
+	pub index: BodyOrAreaIndex,
 	pub shape: u32,
 }
 
@@ -172,6 +177,7 @@ impl Space {
 			let b = &self.colliders[event.collider2];
 			let (area, body) = if let Some(a) = Area::get_collider_userdata(a) {
 				if let Some(b) = Area::get_collider_userdata(b) {
+					let (a, b) = (a.index(), b.index());
 					let (area_a, area_b) = areas.get2_mut(a.into(), b.into());
 					let area_a = area_a.expect("Invalid area A index");
 					let area_b = area_b.expect("Invalid area B index");
@@ -339,21 +345,39 @@ impl Space {
 		from: Vector3,
 		to: Vector3,
 		mask: u32,
-		exclude: &[BodyIndex],
+		exclude_bodies: Option<&[BodyIndex]>,
+		exclude_areas: Option<&[AreaIndex]>,
+		ray_pickable_only: bool,
 	) -> Option<RayCastResult> {
 		self.update_query_pipeline();
 		let dir = to - from;
 		let (dir, max_toi) = (dir.normalize(), dir.length());
-		let filter = if !exclude.is_empty() {
-			Some(|_, c: &'_ _| {
-				!exclude.contains(&body::ColliderUserdata::try_from(c).unwrap().index())
-			})
-		} else {
-			None
+		// TODO avoid box
+		let filter = match (exclude_bodies, exclude_areas) {
+			(Some(bodies), Some(areas)) => Box::new(move |_, c: &'_ _| {
+				if let Ok(ud) = body::ColliderUserdata::try_from(c) {
+					(ud.ray_pickable() || !ray_pickable_only) && !bodies.contains(&ud.index())
+				} else {
+					let ud = area::ColliderUserdata::try_from(c).expect("Invalid collider userdata");
+					(ud.ray_pickable() || !ray_pickable_only) && !areas.contains(&ud.index())
+				}
+			}) as Box<dyn Fn(ColliderHandle, &Collider) -> bool>,
+			(Some(bodies), None) => Box::new(move |_, c: &'_ _| {
+				if let Ok(ud) = body::ColliderUserdata::try_from(c) {
+					(ud.ray_pickable() || !ray_pickable_only) && !bodies.contains(&ud.index())
+				} else {
+					false
+				}
+			}) as Box<dyn Fn(ColliderHandle, &Collider) -> bool>,
+			(None, Some(areas)) => Box::new(move |_, c: &'_ _| {
+				if let Ok(ud) = area::ColliderUserdata::try_from(c) {
+					(ud.ray_pickable() || !ray_pickable_only) && !areas.contains(&ud.index())
+				} else {
+					false
+				}
+			}) as Box<dyn Fn(ColliderHandle, &Collider) -> bool>,
+			(None, None) => return None,
 		};
-		let filter = filter.as_ref();
-		// TODO account for excluded colliders
-		// Rapier 0.7 added a `filter` parameter which can be used for the exclusion list.
 		let intersection = self.query_pipeline.cast_ray_and_get_normal(
 			&self.colliders,
 			&Ray::new(Point3::new(from.x, from.y, from.z), vec_gd_to_na(dir)),
@@ -361,18 +385,27 @@ impl Space {
 			// TODO what is the solid parameter for?
 			false,
 			InteractionGroups::new(u32::MAX, mask),
-			filter.map(|v| v as &dyn Fn(_, &'_ _) -> bool),
+			Some(&filter),
 		);
 		intersection.map(|(collider, intersection)| {
 			let position = dir * intersection.toi + from; // MulAdd not implemented :(
 			let normal = vec_na_to_gd(intersection.normal);
 			let collider = self.colliders.get(collider).unwrap();
-			let c = body::ColliderUserdata::try_from(collider).unwrap();
-			RayCastResult {
-				position,
-				normal,
-				body: c.index(),
-				shape: c.shape(),
+			if let Ok(c) = body::ColliderUserdata::try_from(collider) {
+				RayCastResult {
+					position,
+					normal,
+					index: BodyOrAreaIndex::Body(c.index()),
+					shape: c.shape(),
+				}
+			} else {
+				let c = area::ColliderUserdata::try_from(collider).expect("Invalid collider userdata");
+				RayCastResult {
+					position,
+					normal,
+					index: BodyOrAreaIndex::Area(c.index()),
+					shape: c.shape(),
+				}
 			}
 		})
 	}

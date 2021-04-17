@@ -1,5 +1,5 @@
 use super::*;
-use crate::space::Space;
+use crate::space::{BodyOrAreaIndex, Space};
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, space_create, create);
@@ -24,18 +24,25 @@ fn intersect_ray(
 	space
 		.map_space_mut(|space, _| {
 			let exclude_raw = info.exclude_raw();
-			let mut exclude = Vec::with_capacity(exclude_raw.len());
+			let mut exclude_bodies = if info.collide_with_bodies() {
+				Some(Vec::with_capacity(exclude_raw.len()))
+			} else {
+				None
+			};
+			let mut exclude_areas = if info.collide_with_areas() {
+				Some(Vec::with_capacity(exclude_raw.len()))
+			} else {
+				None
+			};
 			for &e in exclude_raw {
 				if let Ok(i) = Index::from_raw(e) {
-					if let Index::Body(i) = i {
-						exclude.push(i);
-					} else {
-						godot_error!("One of the indices does not point to a body");
-						// TODO should we continue on regardless?
+					match i {
+						Index::Body(i) => { exclude_bodies.as_mut().map(|v| v.push(i)); }
+						Index::Area(i) => { exclude_areas.as_mut().map(|v| v.push(i)); }
+						_ => godot_error!("One of the indices does not point to a body"),
 					}
 				} else {
 					godot_error!("One of the indices is invalid");
-					// TODO ditto?
 				}
 			}
 			space
@@ -43,14 +50,23 @@ fn intersect_ray(
 					info.from(),
 					info.to(),
 					info.collision_mask(),
-					&exclude[..],
+					exclude_bodies.as_deref(),
+					exclude_areas.as_deref(),
+					info.pick_ray(),
 				)
 				.map(|res| {
-					let object_id = res.body.map(|body| body.object_id()).expect("Invalid body");
+					let (object_id, index) = match res.index {
+						BodyOrAreaIndex::Body(body) => {
+							(body.map(|body| body.object_id()).expect("Invalid body"), Index::Body(body))
+						}
+						BodyOrAreaIndex::Area(area) => {
+							(area.map(|area| area.object_id()).expect("Invalid area"), Index::Area(area))
+						}
+					};
 					result.set_position(res.position);
 					result.set_normal(res.normal);
 					result.set_object_id(object_id);
-					result.set_index(Index::Body(res.body));
+					result.set_index(index);
 					result.set_shape(res.shape);
 				})
 				.is_some()
