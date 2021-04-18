@@ -1,7 +1,7 @@
 use crate::area::Area;
-use crate::{body, area};
 use crate::server::{AreaIndex, BodyIndex, MapIndex, ShapeIndex, SpaceIndex};
 use crate::util::*;
+use crate::{area, body};
 use core::convert::TryFrom;
 use gdnative::prelude::*;
 use rapier3d::crossbeam::channel::{self, Receiver, Sender};
@@ -11,7 +11,7 @@ use rapier3d::dynamics::{
 };
 use rapier3d::geometry::{
 	BroadPhase, Collider, ColliderHandle, ColliderSet, ContactEvent, InteractionGroups,
-	IntersectionEvent, NarrowPhase, Ray, SolverFlags, InteractionTestMode,
+	InteractionTestMode, IntersectionEvent, NarrowPhase, Ray, SolverFlags,
 };
 use rapier3d::na::Point3;
 use rapier3d::pipeline::{
@@ -46,6 +46,9 @@ pub struct Space {
 	contact_recv: Receiver<(BodyIndex, body::ContactEvent)>,
 
 	area_map: BTreeMap<i32, Vec<RigidBodyHandle>>,
+
+	debug_contacts: Vec<Vector3>,
+	debug_contact_count: usize,
 
 	index: Option<SpaceIndex>,
 }
@@ -105,6 +108,9 @@ impl Space {
 			enabled: true,
 
 			area_map: BTreeMap::new(),
+
+			debug_contacts: Vec::new(),
+			debug_contact_count: 0,
 
 			default_linear_damp: 0.0,
 			default_angular_damp: 0.0,
@@ -223,6 +229,9 @@ impl Space {
 				body.apply_area_overrides(rb, self.default_linear_damp, self.default_angular_damp);
 			}
 		}
+
+		// Clear debug contacts
+		self.debug_contacts.clear();
 	}
 
 	/// Gets the index of this space
@@ -358,7 +367,8 @@ impl Space {
 				if let Ok(ud) = body::ColliderUserdata::try_from(c) {
 					(ud.ray_pickable() || !ray_pickable_only) && !bodies.contains(&ud.index())
 				} else {
-					let ud = area::ColliderUserdata::try_from(c).expect("Invalid collider userdata");
+					let ud =
+						area::ColliderUserdata::try_from(c).expect("Invalid collider userdata");
 					(ud.ray_pickable() || !ray_pickable_only) && !areas.contains(&ud.index())
 				}
 			}) as Box<dyn Fn(ColliderHandle, &Collider) -> bool>,
@@ -399,7 +409,8 @@ impl Space {
 					shape: c.shape(),
 				}
 			} else {
-				let c = area::ColliderUserdata::try_from(collider).expect("Invalid collider userdata");
+				let c =
+					area::ColliderUserdata::try_from(collider).expect("Invalid collider userdata");
 				RayCastResult {
 					position,
 					normal,
@@ -463,6 +474,33 @@ impl Space {
 	/// Returns a mutable reference to a collider if it exists
 	pub fn get_collider_mut(&mut self, collider: ColliderHandle) -> Option<&mut Collider> {
 		self.colliders.get_mut(collider)
+	}
+
+	/// Sets the amount of debug contacts to keep track of
+	pub fn set_debug_contact_count(&mut self, count: usize) {
+		dbg!(count);
+		self.debug_contact_count = count;
+	}
+
+	/// Gets the current debug contacts
+	pub fn debug_contacts(&mut self) -> &[Vector3] {
+		if self.debug_contact_count > 0 && self.debug_contacts.is_empty() {
+			self.debug_contacts = self
+				.narrow_phase
+				.contact_pairs()
+				.flat_map(|cp| {
+					let pos = *self.colliders[cp.pair.collider1].position();
+					cp.manifolds.iter().map(move |cm| (cm, pos))
+				})
+				.flat_map(|(cm, pos)| {
+					cm.points
+						.iter()
+						.map(move |p| pos * p.local_p1)
+				})
+				.map(|p| vec_na_to_gd(p.coords))
+				.collect();
+		}
+		self.debug_contacts.as_slice()
 	}
 }
 

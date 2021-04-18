@@ -47,6 +47,7 @@ SERVER_EXCLUDE = {
     'soft_body_get_collision_exceptions',
     'soft_body_update_visual_server',
     'soft_body_set_mesh',
+    'space_get_contacts',
     'space_get_direct_state',
     'step',
 }
@@ -62,6 +63,7 @@ API_EXCLUDE = {
     'soft_body_get_collision_exceptions',
     'soft_body_update_visual_server',
     'soft_body_set_mesh',
+    'space_get_contacts',
     'space_get_direct_state',
 }
 
@@ -98,6 +100,10 @@ API_CUSTOM_FUNCTIONS = {
     ]),
     'free': ('void', [
         ('index_t', 'id')
+    ]),
+    'space_get_contact': ('godot_vector3', [
+        ('index_t', 'space'),
+        ('size_t', 'id'),
     ]),
     'space_intersect_ray': ('bool', [
         ('index_t', 'space'),

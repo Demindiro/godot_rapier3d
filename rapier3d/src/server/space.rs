@@ -1,11 +1,16 @@
 use super::*;
 use crate::space::{BodyOrAreaIndex, Space};
+use gdnative::core_types::{Vector3, Vector3Godot};
+use gdnative::sys;
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, space_create, create);
+	ffi!(ffi, space_get_contact, get_contact);
+	ffi!(ffi, space_get_contact_count, get_contact_count);
+	ffi!(ffi, space_intersect_ray, intersect_ray);
 	ffi!(ffi, space_is_active, is_active);
 	ffi!(ffi, space_set_active, set_active);
-	ffi!(ffi, space_intersect_ray, intersect_ray);
+	ffi!(ffi, space_set_debug_contacts, set_debug_contacts);
 }
 
 pub fn free(_space: Space) {}
@@ -37,8 +42,12 @@ fn intersect_ray(
 			for &e in exclude_raw {
 				if let Ok(i) = Index::from_raw(e) {
 					match i {
-						Index::Body(i) => { exclude_bodies.as_mut().map(|v| v.push(i)); }
-						Index::Area(i) => { exclude_areas.as_mut().map(|v| v.push(i)); }
+						Index::Body(i) => {
+							exclude_bodies.as_mut().map(|v| v.push(i));
+						}
+						Index::Area(i) => {
+							exclude_areas.as_mut().map(|v| v.push(i));
+						}
 						_ => godot_error!("One of the indices does not point to a body"),
 					}
 				} else {
@@ -56,12 +65,14 @@ fn intersect_ray(
 				)
 				.map(|res| {
 					let (object_id, index) = match res.index {
-						BodyOrAreaIndex::Body(body) => {
-							(body.map(|body| body.object_id()).expect("Invalid body"), Index::Body(body))
-						}
-						BodyOrAreaIndex::Area(area) => {
-							(area.map(|area| area.object_id()).expect("Invalid area"), Index::Area(area))
-						}
+						BodyOrAreaIndex::Body(body) => (
+							body.map(|body| body.object_id()).expect("Invalid body"),
+							Index::Body(body),
+						),
+						BodyOrAreaIndex::Area(area) => (
+							area.map(|area| area.object_id()).expect("Invalid area"),
+							Index::Area(area),
+						),
 					};
 					result.set_position(res.position);
 					result.set_normal(res.normal);
@@ -89,4 +100,29 @@ fn is_active(space: Index) -> bool {
 		godot_error!("RID does not point to a space");
 		false
 	}
+}
+
+fn set_debug_contacts(space: Index, contacts: i32) {
+	map_or_err!(space, map_space_mut, |space, _| space
+		.set_debug_contact_count(contacts as usize));
+}
+
+fn get_contact_count(space: Index) -> i32 {
+	map_or_err!(space, map_space_mut, |space, _| space
+		.debug_contacts()
+		.len())
+	.unwrap_or(0) as i32
+}
+
+fn get_contact(space: Index, contact: usize) -> sys::godot_vector3 {
+	map_or_err!(space, map_space_mut, |space, _| {
+		if let Some(contact) = space.debug_contacts().get(contact) {
+			*contact
+		} else {
+			godot_error!("Invalid contact index");
+			Vector3::zero()
+		}
+	})
+	.unwrap_or(Vector3::zero())
+	.to_sys()
 }
