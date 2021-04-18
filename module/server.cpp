@@ -18,6 +18,7 @@ PluggablePhysicsServer::PluggablePhysicsServer() {
 }
 
 PluggablePhysicsServer::~PluggablePhysicsServer() {
+	this->library->terminate();
 }
 
 void PluggablePhysicsServer::_bind_methods() {
