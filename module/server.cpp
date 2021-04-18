@@ -216,7 +216,7 @@ Vector<Vector3> PluggablePhysicsServer::space_get_contacts(RID space) const {
 	contacts.resize(count);
 	Vector3 *contacts_ptr = contacts.ptrw();
 	for (size_t i = 0; i < count; i++) {
-		contacts_ptr[i] = (*this->fn_table.space_get_contact)(id, i);
+		(*this->fn_table.space_get_contact)(id, i, &contacts_ptr[i]);
 	}
 	return contacts;
 }

@@ -1,7 +1,6 @@
 use super::*;
 use crate::space::{BodyOrAreaIndex, Space};
-use gdnative::core_types::{Vector3, Vector3Godot};
-use gdnative::sys;
+use gdnative::core_types::Vector3;
 
 pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, space_create, create);
@@ -114,15 +113,14 @@ fn get_contact_count(space: Index) -> i32 {
 	.unwrap_or(0) as i32
 }
 
-fn get_contact(space: Index, contact: usize) -> sys::godot_vector3 {
-	map_or_err!(space, map_space_mut, |space, _| {
-		if let Some(contact) = space.debug_contacts().get(contact) {
+fn get_contact(space: Index, contact: i32, out: &mut Vector3) {
+	*out = map_or_err!(space, map_space_mut, |space, _| {
+		if let Some(contact) = space.debug_contacts().get(contact as usize) {
 			*contact
 		} else {
 			godot_error!("Invalid contact index");
 			Vector3::zero()
 		}
 	})
-	.unwrap_or(Vector3::zero())
-	.to_sys()
+	.unwrap_or(Vector3::zero());
 }

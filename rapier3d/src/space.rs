@@ -478,7 +478,6 @@ impl Space {
 
 	/// Sets the amount of debug contacts to keep track of
 	pub fn set_debug_contact_count(&mut self, count: usize) {
-		dbg!(count);
 		self.debug_contact_count = count;
 	}
 
@@ -495,7 +494,7 @@ impl Space {
 				.flat_map(|(cm, pos)| {
 					cm.points
 						.iter()
-						.map(move |p| pos * p.local_p1)
+						.map(move |p| pos.transform_point(&p.local_p1))
 				})
 				.map(|p| vec_na_to_gd(p.coords))
 				.collect();

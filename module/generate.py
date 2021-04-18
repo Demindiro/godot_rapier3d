@@ -101,9 +101,10 @@ API_CUSTOM_FUNCTIONS = {
     'free': ('void', [
         ('index_t', 'id')
     ]),
-    'space_get_contact': ('godot_vector3', [
+    'space_get_contact': ('void', [
         ('index_t', 'space'),
-        ('size_t', 'id'),
+        ('int', 'id'),
+        ('godot_vector3 *', 'out'),
     ]),
     'space_intersect_ray': ('bool', [
         ('index_t', 'space'),
