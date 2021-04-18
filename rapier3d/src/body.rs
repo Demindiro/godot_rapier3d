@@ -6,12 +6,12 @@ use crate::space::Space;
 use crate::util::*;
 use core::convert::{TryFrom, TryInto};
 use gdnative::core_types::*;
-use rapier3d::dynamics::{BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet};
+use rapier3d::dynamics::{BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet, Axis};
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
 };
 use rapier3d::math::Isometry;
-use rapier3d::na::Point3;
+use rapier3d::na::{self, Point3};
 
 pub struct BodyShape {
 	index: ShapeIndex,
@@ -51,6 +51,8 @@ pub struct Body {
 	restitution: f32,
 	friction: f32,
 
+	mass_properties: MassProperties,
+
 	inertia_stale: bool,
 
 	area_gravity: Option<Vector3>,
@@ -87,6 +89,8 @@ impl Body {
 			linear_damp: -1.0,
 			restitution: 0.0,
 			friction: 1.0,
+
+			mass_properties: MassProperties::new(Point3::origin(), 1.0, na::Vector3::zeros()),
 
 			inertia_stale: false,
 
@@ -703,6 +707,7 @@ impl Body {
 
 	/// Sets the mass of this body
 	pub fn set_mass(&mut self, mass: f32) {
+		self.mass_properties.set_mass(mass, true);
 		self.map_rigidbody_mut(|body| {
 			let mut p = *body.mass_properties();
 			p.inv_mass = 1.0 / mass;
@@ -808,6 +813,37 @@ impl Body {
 	/// Enables or disables Continuous Collision Detected (CCD)
 	pub fn enable_ccd(&mut self, enable: bool) {
 		self.map_rigidbody_mut(|body| body.enable_ccd(enable));
+	}
+
+	/// Locks this body in place at it's current position, which prevents it from being pushed
+	/// by external forces. It may still rotate around it's origin.
+	pub fn set_translation_lock(&mut self, lock: bool) {
+		self.map_rigidbody_mut(|body| {
+			body.set_translation_locked(lock)
+		});
+	}
+
+	/// Prevents this body from rotating due to external forces. It can
+	/// still be translated however. The axis is defined in global space.
+	pub fn set_rotation_lock(&mut self, axis: Axis, lock: bool) {
+		self.map_rigidbody_mut(|body| {
+			body.set_rotation_locked(axis, lock)
+		});
+	}
+
+	/// Returns whether this body is locked in place
+	pub fn is_translation_locked(&self) -> bool {
+		self.map_rigidbody(|body| body.is_translation_locked())
+	}
+
+	/// Returns whether the given local axis of this body is locked
+	pub fn is_rotation_locked(&self, axis: Axis) -> bool {
+		let axis = match axis {
+			Axis::X => 0,
+			Axis::Y => 1,
+			Axis::Z => 2,
+		};
+		self.map_rigidbody(|body| body.is_rotation_locked()[axis])
 	}
 }
 
