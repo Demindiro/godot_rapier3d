@@ -1,7 +1,7 @@
 use super::*;
 use crate::area::*;
 use gdnative::core_types::*;
-use gdnative::{godot_error, godot_warn};
+use gdnative::godot_error;
 
 #[derive(Debug)]
 enum ParamError {
