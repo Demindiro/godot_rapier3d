@@ -243,8 +243,13 @@ impl Body {
 					.restitution(self.restitution)
 					.friction(self.friction)
 					.build();
-				collider.user_data =
-					ColliderUserdata::new(index, self.max_contacts > 0, self.ray_pickable, i as u32).into();
+				collider.user_data = ColliderUserdata::new(
+					index,
+					self.max_contacts > 0,
+					self.ray_pickable,
+					i as u32,
+				)
+				.into();
 				colliders.push(Some(collider));
 			} else {
 				colliders.push(None);
@@ -519,7 +524,8 @@ impl Body {
 	pub fn set_ray_pickable(&mut self, pickable: bool) {
 		self.ray_pickable = pickable;
 		self.map_colliders(|collider| {
-			let mut ud = ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
+			let mut ud =
+				ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
 			ud.set_ray_pickable(pickable);
 			collider.user_data = ud.into();
 		})

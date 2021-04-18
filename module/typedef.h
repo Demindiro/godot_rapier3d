@@ -9,6 +9,5 @@ typedef Vector3 godot_vector3;
 typedef Variant godot_variant;
 typedef StringName godot_string_name;
 typedef Object godot_object;
-typedef Vector<Vector3> godot_pool_vector3_array;
 
 #endif

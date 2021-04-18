@@ -1,12 +1,10 @@
 use crate::body::Body;
 use crate::indices::{self, Indices};
-use crate::server::{
-	AreaIndex, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex,
-};
+use crate::server::{AreaIndex, BodyIndex, Instance, MapIndex, ObjectID, ShapeIndex, SpaceIndex};
 use crate::util::*;
+use core::convert::{TryFrom, TryInto};
 use core::mem;
 use gdnative::core_types::*;
-use core::convert::{TryFrom, TryInto};
 use rapier3d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet};
 use rapier3d::geometry::{Collider, ColliderHandle, InteractionGroups};
 use rapier3d::na::{Isometry3, Point3};
@@ -429,7 +427,8 @@ impl Area {
 	pub fn set_ray_pickable(&mut self, enable: bool) {
 		self.ray_pickable = enable;
 		self.map_colliders(|collider| {
-			let mut ud = ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
+			let mut ud =
+				ColliderUserdata::try_from(collider.user_data).expect("Invalid collider userdata");
 			ud.set_ray_pickable(enable);
 			collider.user_data = ud.into();
 		});
@@ -447,7 +446,9 @@ impl Area {
 
 	/// Stores the area's index in the given [`Collider`]
 	fn set_collider_userdata(&self, collider: &mut Collider) {
-		collider.user_data = ColliderUserdata::new(self.index(), self.monitorable, self.ray_pickable, u32::MAX).into();
+		collider.user_data =
+			ColliderUserdata::new(self.index(), self.monitorable, self.ray_pickable, u32::MAX)
+				.into();
 	}
 
 	/// Stores the area's index in the given [`RigidBody`]
@@ -654,7 +655,6 @@ impl From<RigidbodyUserdata> for u128 {
 		ud.0
 	}
 }
-
 
 impl ColliderUserdata {
 	const TYPE_MASK: u128 = 0x0000_0000_8000_0000_0000_0000;

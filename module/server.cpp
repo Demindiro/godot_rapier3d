@@ -203,6 +203,23 @@ PhysicsDirectSpaceState *PluggablePhysicsServer::space_get_direct_state(RID spac
 	return this->space_state_singleton;
 }
 
+Vector<Vector3> PluggablePhysicsServer::space_get_contacts(RID space) const {
+	ERR_FAIL_COND_V_MSG(this->fn_table.space_get_contact_count == nullptr, Vector<Vector3>(), "Not implemented");
+	ERR_FAIL_COND_V_MSG(this->fn_table.space_get_contact == nullptr, Vector<Vector3>(), "Not implemented");
+
+	index_t id = this->get_index(space);
+	ERR_FAIL_COND_V_MSG(id == 0, Vector<Vector3>(), "Invalid RID");
+
+	size_t count = (*this->fn_table.space_get_contact_count)(id);
+	Vector<Vector3> contacts;
+	contacts.resize(count);
+	Vector3 *contacts_ptr = contacts.ptrw();
+	for (size_t i = 0; i < count; i++) {
+		contacts_ptr[i] = (*this->fn_table.space_get_contact)(id, i);
+	}
+	return contacts;
+}
+
 void PluggablePhysicsServer::soft_body_update_visual_server(RID soft_body, SoftBodyVisualServerHandler *handler) {
 	ERR_FAIL_MSG("TODO");
 }
