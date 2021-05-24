@@ -6,7 +6,9 @@ use crate::space::Space;
 use crate::util::*;
 use core::convert::{TryFrom, TryInto};
 use gdnative::core_types::*;
-use rapier3d::dynamics::{BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet, Axis};
+use rapier3d::dynamics::{
+	Axis, BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet,
+};
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
 };
@@ -818,17 +820,13 @@ impl Body {
 	/// Locks this body in place at it's current position, which prevents it from being pushed
 	/// by external forces. It may still rotate around it's origin.
 	pub fn set_translation_lock(&mut self, lock: bool) {
-		self.map_rigidbody_mut(|body| {
-			body.set_translation_locked(lock)
-		});
+		self.map_rigidbody_mut(|body| body.set_translation_locked(lock));
 	}
 
 	/// Prevents this body from rotating due to external forces. It can
 	/// still be translated however. The axis is defined in global space.
 	pub fn set_rotation_lock(&mut self, axis: Axis, lock: bool) {
-		self.map_rigidbody_mut(|body| {
-			body.set_rotation_locked(axis, lock)
-		});
+		self.map_rigidbody_mut(|body| body.set_rotation_locked(axis, lock));
 	}
 
 	/// Returns whether this body is locked in place

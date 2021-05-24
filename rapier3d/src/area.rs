@@ -209,10 +209,26 @@ impl Area {
 	/// # Returns
 	///
 	/// [`true`] if the shape existed, [`false`] otherwise
-	pub fn set_shape_transform(&mut self, shape: u32, transform: &Transform) -> bool {
-		self.get_shape_mut(shape)
-			.map(|shape| shape.transform = transform_to_isometry(*transform))
-			.is_some()
+	pub fn set_shape_transform(&mut self, shape_index: u32, transform: &Transform) -> bool {
+		if let Some(shape) = self.get_shape_mut(shape_index) {
+			let transform = transform_to_isometry(*transform);
+			shape.transform = transform;
+			if let Some(((_, colliders), space)) = self.instance.as_attached() {
+				if let Some(collider) = colliders[shape_index as usize] {
+					space
+						.map_mut(|space| {
+							space
+								.get_collider_mut(collider)
+								.expect("Invalid collider handle")
+								.set_position_wrt_parent(transform);
+						})
+						.expect("Invalid space index");
+				}
+			}
+			true
+		} else {
+			false
+		}
 	}
 
 	/// Sets whether this shape is enabled or not
@@ -220,10 +236,51 @@ impl Area {
 	/// # Returns
 	///
 	/// [`true`] if the shape existed, [`false`] otherwise
-	pub fn set_shape_enabled(&mut self, shape: u32, enabled: bool) -> bool {
-		self.get_shape_mut(shape)
-			.map(|shape| shape.enabled = enabled)
-			.is_some()
+	pub fn set_shape_enabled(&mut self, shape_index: u32, enabled: bool) -> bool {
+		if let Some(shape) = self.get_shape_mut(shape_index) {
+			shape.enabled = enabled;
+			let (shape, transform, scale) = (shape.shape, shape.transform, shape.scale);
+			let (index, monitorable, ray_pickable) =
+				(self.index(), self.monitorable, self.ray_pickable);
+			if let Some(((body, colliders), space)) = self.instance.as_attached_mut() {
+				if enabled {
+					if colliders[shape_index as usize].is_none() {
+						space
+							.map_mut(|space| {
+								shape
+									.map(|s| {
+										let mut c = s.build(transform, scale, true);
+										// `set_collider_userdata` doesn't work because of limitations in
+										// the borrow checker.
+										c.user_data = ColliderUserdata::new(
+											index,
+											monitorable,
+											ray_pickable,
+											u32::MAX,
+										)
+										.into();
+										let c = space.add_collider(c, *body);
+										colliders[shape_index as usize] = Some(c);
+									})
+									.expect("Invalid shape index");
+							})
+							.expect("Invalid space index");
+					}
+				} else if let Some(collider) = colliders[shape_index as usize] {
+					space
+						.map_mut(|space| {
+							space
+								.remove_collider(collider)
+								.expect("Invalid collider handle");
+						})
+						.expect("Invalid space index");
+					colliders[shape_index as usize] = None;
+				}
+			}
+			true
+		} else {
+			false
+		}
 	}
 
 	/// Returns the ['ShapeIndex`] of the given shape.
