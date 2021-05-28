@@ -11,7 +11,7 @@
 
 
 PluggablePhysicsServer::PluggablePhysicsServer() {
-	zeromem(&this->fn_table, sizeof(this->fn_table));
+	memset(&this->fn_table, 0, sizeof(this->fn_table));
 	this->body_state_singleton = memnew(PluggablePhysicsDirectBodyState(this));
 	this->space_state_singleton = memnew(PluggablePhysicsDirectSpaceState(this));
 	this->body_state_singleton->space_state_singleton = this->space_state_singleton;

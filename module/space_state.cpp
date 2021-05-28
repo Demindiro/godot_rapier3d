@@ -26,14 +26,14 @@ bool PluggablePhysicsDirectSpaceState::intersect_ray(const Vector3 &from, const 
 	}
 
 	struct physics_ray_info info = {
-		.from = from,
-		.to = to,
-		.exclude = e_list,
-		.exclude_count = (size_t)exclude.size(),
-		.collision_mask = collision_mask,
-		.collide_with_bodies = collide_with_bodies,
-		.collide_with_areas = collide_with_areas,
-		.pick_ray = pick_ray,
+		from,
+		to,
+		e_list,
+		(size_t)exclude.size(),
+		collision_mask,
+		collide_with_bodies,
+		collide_with_areas,
+		pick_ray,
 	};
 	struct physics_ray_result prr = {};
 	bool collided = (*this->server->fn_table.space_intersect_ray)(this->space, &info, &prr);

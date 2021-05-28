@@ -8,7 +8,9 @@ reloadable=false
 [entry]
 
 X11.64="res://addons/rapier3d/lib/librapier3d.so"
+Windows.64="res://addons/rapier3d/lib/rapier3d.dll"
 
 [dependencies]
 
 X11.64=[  ]
+Windows.64=[  ]
