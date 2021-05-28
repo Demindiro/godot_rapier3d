@@ -193,6 +193,14 @@ impl<A, L> Instance<A, L> {
 			None
 		}
 	}
+
+	pub fn as_attached_mut(&mut self) -> Option<(&mut A, SpaceIndex)> {
+		if let Instance::Attached(a, i) = self {
+			Some((a, *i))
+		} else {
+			None
+		}
+	}
 }
 
 map_index!(AREA_INDICES, Area, AreaIndex,);

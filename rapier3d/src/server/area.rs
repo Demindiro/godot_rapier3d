@@ -84,10 +84,10 @@ fn create() -> Option<Index> {
 	Some(Index::Area(index))
 }
 
-fn add_shape(area: Index, shape: Index, transform: &Transform, enable: bool) {
+fn add_shape(area: Index, shape: Index, transform: &Transform, disable: bool) {
 	if let Some(shape) = shape.as_shape() {
 		map_or_err!(area, map_area_mut, |area, _| area
-			.add_shape(shape, transform, enable));
+			.add_shape(shape, transform, !disable));
 	} else {
 		godot_error!("Index does not point to a shape");
 	}

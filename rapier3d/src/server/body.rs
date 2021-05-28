@@ -4,7 +4,7 @@ use crate::body::Body;
 use crate::util::*;
 use gdnative::core_types::*;
 use gdnative::godot_error;
-use rapier3d::dynamics::{ActivationStatus, BodyStatus, RigidBody, RigidBodyBuilder, Axis};
+use rapier3d::dynamics::{ActivationStatus, Axis, BodyStatus, RigidBody, RigidBodyBuilder};
 
 #[derive(Debug)]
 enum Type {
@@ -76,8 +76,8 @@ impl Type {
 			Type::Character => RigidBodyBuilder::new_dynamic(),
 		}
 		.sleeping(sleep)
-			.additional_mass(1.0)
-			.build()
+		.additional_mass(1.0)
+		.build()
 	}
 }
 
@@ -144,13 +144,13 @@ pub fn init(ffi: &mut ffi::FFI) {
 		ffi,
 		body_attach_object_instance_id,
 		attach_object_instance_id
-		);
+	);
 	ffi!(ffi, body_create, create);
 	ffi!(
 		ffi,
 		body_is_continuous_collision_detection_enabled,
 		is_continuous_collision_detection_enabled
-		);
+	);
 	ffi!(ffi, body_get_contact, get_contact);
 	ffi!(ffi, body_get_direct_state, get_direct_state);
 	ffi!(ffi, body_get_kinematic_safe_margin, |_| 0.0);
@@ -163,19 +163,19 @@ pub fn init(ffi: &mut ffi::FFI) {
 		ffi,
 		body_set_enable_continuous_collision_detection,
 		set_enable_continuous_collision_detection
-		);
+	);
 	ffi!(ffi, body_set_kinematic_safe_margin, |_, _| ());
 	ffi!(
 		ffi,
 		body_set_max_contacts_reported,
 		set_max_contacts_reported
-		);
+	);
 	ffi!(ffi, body_set_mode, set_mode);
 	ffi!(
 		ffi,
 		body_set_omit_force_integration,
 		set_omit_force_integration
-		);
+	);
 	ffi!(ffi, body_set_param, set_param);
 	ffi!(ffi, body_set_shape_transform, set_shape_transform);
 	ffi!(ffi, body_set_shape_disabled, set_shape_disabled);
@@ -250,7 +250,7 @@ fn apply_impulse(body: Index, position: &Vector3, impulse: &Vector3) {
 
 fn attach_object_instance_id(body: Index, id: u32) {
 	map_or_err!(body, map_body_mut, |b, _| b
-				.set_object_id(ObjectID::new(id)));
+		.set_object_id(ObjectID::new(id)));
 }
 
 fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
@@ -296,7 +296,7 @@ fn get_contact(body: Index, id: u32, contact: &mut ffi::PhysicsBodyContact) {
 
 fn remove_shape(body: Index, shape: i32) {
 	map_or_err!(body, map_body_mut, |body, _| body
-				.remove_shape(shape as u32));
+		.remove_shape(shape as u32));
 }
 
 fn set_param(body: Index, param: i32, value: f32) {
@@ -344,18 +344,18 @@ fn set_mode(body: Index, mode: i32) {
 
 fn set_omit_force_integration(body: Index, enable: bool) {
 	map_or_err!(body, map_body_mut, |body, _| body
-				.set_omit_force_integration(enable));
+		.set_omit_force_integration(enable));
 }
 
 fn set_shape_transform(body: Index, shape: i32, transform: &Transform) {
 	let shape = shape as u32;
 	map_or_err!(body, map_body_mut, |body, _| body
-				.set_shape_transform(shape, transform));
+		.set_shape_transform(shape, transform));
 }
 
 fn set_shape_disabled(body: Index, shape: i32, disable: bool) {
 	map_or_err!(body, map_body_mut, |body, _| body
-				.set_shape_enable(shape as u32, !disable));
+		.set_shape_enable(shape as u32, !disable));
 }
 
 fn set_space(body: Index, space: Option<Index>) {
@@ -424,7 +424,8 @@ fn is_axis_locked(body: Index, axis: i32) -> bool {
 				BodyAxis::Linear(_) => body.is_translation_locked(),
 				BodyAxis::Angular(axis) => body.is_rotation_locked(axis),
 			}
-		}).unwrap_or(false)
+		})
+		.unwrap_or(false)
 	} else {
 		godot_error!("Invalid axis");
 		false
