@@ -124,6 +124,16 @@ impl<T> Indices<T> {
 		}
 	}
 
+	pub fn iter(&self) -> impl Iterator<Item = (Index, &T)> {
+		self.elements.iter().enumerate().filter_map(|(i, e)| {
+			if let Entry::Occupied { item, generation } = e {
+				Some((Index::new(i as u32, *generation), item))
+			} else {
+				None
+			}
+		})
+	}
+
 	pub fn iter_mut(&mut self) -> impl Iterator<Item = (Index, &mut T)> {
 		self.elements.iter_mut().enumerate().filter_map(|(i, e)| {
 			if let Entry::Occupied { item, generation } = e {
