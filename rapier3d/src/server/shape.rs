@@ -168,25 +168,24 @@ impl Shape {
 			Type::Concave | Type::Convex => {
 				let array = e(data.try_to_vector3_array())?;
 				let array = array.read();
-				if array.len() % 3 != 0 {
-					return Err(ShapeError::IncompleteTriangle);
-				}
 				let mut verts = Vec::with_capacity(array.len());
 				for v in array.iter() {
 					verts.push(p(v.x, v.y, v.z));
 				}
-				let mut indices = Vec::with_capacity(array.len());
-				// It may be worth to perform some sort of deduplication to reduce the
-				// amount of vertices. For now, the simple, dumb way will do.
-				for i in 0..array.len() / 3 {
-					let i = i * 3;
-					indices.push([i as u32, (i + 1) as u32, (i + 2) as u32]);
-				}
 				if let Type::Concave = self.r#type {
+					if array.len() % 3 != 0 {
+						return Err(ShapeError::IncompleteTriangle);
+					}
+					let mut indices = Vec::with_capacity(array.len());
+					// It may be worth to perform some sort of deduplication to reduce the
+					// amount of vertices. For now, the simple, dumb way will do.
+					for i in 0..array.len() / 3 {
+						let i = i * 3;
+						indices.push([i as u32, (i + 1) as u32, (i + 2) as u32]);
+					}
 					SharedShape::trimesh(verts, indices)
 				} else {
-					SharedShape::convex_mesh(verts, &indices)
-						.ok_or(ShapeError::ConvexNotManifold)?
+					SharedShape::convex_hull(&verts).ok_or(ShapeError::ConvexNotManifold)?
 				}
 			}
 		};
