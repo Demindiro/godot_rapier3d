@@ -22,7 +22,7 @@ PluggablePhysicsServer::~PluggablePhysicsServer() {
 }
 
 void PluggablePhysicsServer::_bind_methods() {
-
+	ClassDB::bind_method(D_METHOD("step", "delta"), &PluggablePhysicsServer::step);
 }
 
 void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* receiver, const StringName &method) {
