@@ -12,6 +12,7 @@ use crate::body::Body;
 use crate::indices::Indices;
 use crate::space::Space;
 use crate::*;
+use core::convert::TryInto;
 use core::num::NonZeroU32;
 use gdnative::godot_error;
 pub use index::*;
@@ -295,8 +296,34 @@ fn free(index: Index) {
 }
 
 fn get_process_info(info: i32) -> i32 {
-	godot_error!("TODO {}", info);
-	0
+    const INFO_ACTIVE_OBJECTS: i32 = 0;
+    const INFO_COLLISION_PAIRS: i32 = 1;
+    const INFO_ISLAND_COUNT: i32 = 2;
+	match info {
+		INFO_ACTIVE_OBJECTS => {
+			let mut total = 0;
+			for (_, space) in SpaceIndex::read_all().iter() {
+				total += space.bodies().iter().filter(|(_, b)| !b.is_sleeping()).count();
+			}
+			total.try_into().unwrap_or(i32::MAX)
+		}
+		INFO_COLLISION_PAIRS => {
+			let mut total = 0;
+			for (_, space) in SpaceIndex::read_all().iter() {
+				total += space.collision_pair_count();
+			}
+			total.try_into().unwrap_or(i32::MAX)
+		}
+		INFO_ISLAND_COUNT => {
+			// TODO figure out where the amount of active islands can be extracted.
+			// For now, just return 0 so Godot at least shuts up.
+			0
+		}
+		_ => {
+			godot_error!("Unknown info property {}", info);
+			-1
+		}
+	}
 }
 
 fn set_active(active: bool) {

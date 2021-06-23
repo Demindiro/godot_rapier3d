@@ -501,6 +501,12 @@ impl Space {
 		}
 		self.debug_contacts.as_slice()
 	}
+
+	/// Gets the total amount of collision pairs
+	pub fn collision_pair_count(&self) -> usize {
+		// contact_pairs: The description of all the contacts between a **pair of colliders**.
+		self.narrow_phase.contact_pairs().count()
+	}
 }
 
 impl BodyExclusionHooks {
