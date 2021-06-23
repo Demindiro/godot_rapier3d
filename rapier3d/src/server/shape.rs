@@ -1,5 +1,7 @@
 use super::*;
 use crate::util::*;
+use core::mem;
+use core::convert::TryFrom;
 use gdnative::core_types::*;
 use rapier3d::geometry::{Collider, ColliderBuilder, SharedShape};
 use rapier3d::math::Point;
@@ -192,6 +194,85 @@ impl Shape {
 		Ok(())
 	}
 
+	fn data(&self) -> Variant {
+		match self.r#type {
+			Type::Box => {
+				let shape = self.shape.as_cuboid().unwrap();
+				vec_na_to_gd(shape.half_extents).owned_to_variant()
+			}
+			Type::Ray => {
+				let shape = self.shape.as_capsule().unwrap();
+				let dict = Dictionary::new();
+				dict.insert("length", shape.segment.a.y.owned_to_variant());
+				dict.owned_to_variant()
+			}
+			Type::Capsule => {
+				let shape = self.shape.as_capsule().unwrap();
+				let dict = Dictionary::new();
+				dict.insert("length", shape.segment.a.y.owned_to_variant());
+				dict.insert("radius", shape.radius.owned_to_variant());
+				dict.owned_to_variant()
+			}
+			Type::Cylinder => {
+				let shape = self.shape.as_cylinder().unwrap();
+				let dict = Dictionary::new();
+				dict.insert("height", shape.half_height);
+				dict.insert("radius", shape.radius);
+				dict.owned_to_variant()
+			}
+			Type::Heightmap => {
+				let shape = self.shape.as_heightfield().unwrap();
+				let depth = shape.nrows();
+				let width = shape.ncols();
+				let mut heights = TypedArray::<f32>::new();
+				heights.resize((depth * width).try_into().unwrap());
+				let mut wr_heights = heights.write();
+				for x in 0..width {
+					for z in 0..depth {
+						wr_heights[x * depth + z] = shape.heights()[(x, z)];
+					}
+				}
+				mem::drop(wr_heights);
+				let dict = Dictionary::new();
+				dict.insert("depth", depth.owned_to_variant());
+				dict.insert("width", width.owned_to_variant());
+				dict.insert("heights", heights.owned_to_variant());
+				dict.owned_to_variant()
+			}
+			Type::Plane => {
+				let _shape = self.shape.as_cuboid().unwrap();
+				let plane = Plane::new(Vector3::new(0.0, 0.0, 0.0), 1.0);
+				plane.owned_to_variant()
+			}
+			Type::Sphere => {
+				let shape = self.shape.as_ball().unwrap();
+				shape.radius.owned_to_variant()
+			}
+			Type::Convex => {
+				let shape = self.shape.as_convex_polyhedron().unwrap();
+				let mut array = TypedArray::<Vector3>::new();
+				array.resize(shape.points().len().try_into().unwrap());
+				let mut wr_array = array.write();
+				for (s, d) in shape.points().iter().zip(wr_array.iter_mut()) {
+					*d = vec_na_to_gd(s.coords);
+				}
+				mem::drop(wr_array);
+				array.owned_to_variant()
+			}
+			Type::Concave => {
+				let shape = self.shape.as_trimesh().unwrap();
+				let mut array = TypedArray::<Vector3>::new();
+				array.resize(shape.flat_indices().len().try_into().unwrap());
+				let mut wr_array = array.write();
+				for (s, d) in shape.flat_indices().iter().zip(wr_array.iter_mut()) {
+					*d = vec_na_to_gd(shape.vertices()[usize::try_from(*s).unwrap()].coords);
+				}
+				mem::drop(wr_array);
+				array.owned_to_variant()
+			}
+		}
+	}
+
 	pub fn shape(&self) -> &SharedShape {
 		&self.shape
 	}
@@ -274,6 +355,7 @@ pub fn init(ffi: &mut ffi::FFI) {
 	ffi!(ffi, shape_create, create);
 	ffi!(ffi, shape_get_margin, |_| 0.0);
 	ffi!(ffi, shape_set_margin, |_, _| ());
+	ffi!(ffi, shape_get_data, get_data);
 	ffi!(ffi, shape_set_data, set_data);
 }
 
@@ -303,4 +385,10 @@ fn set_data(shape: Index, data: &Variant) {
 			godot_error!("Failed to apply data: {:?}", e);
 		}
 	});
+}
+
+fn get_data(shape: Index) -> gdnative::sys::godot_variant {
+	map_or_err!(shape, map_shape, |shape, _| {
+		shape.data()
+	}).unwrap_or(Variant::new()).forget()
 }
