@@ -296,14 +296,18 @@ fn free(index: Index) {
 }
 
 fn get_process_info(info: i32) -> i32 {
-    const INFO_ACTIVE_OBJECTS: i32 = 0;
-    const INFO_COLLISION_PAIRS: i32 = 1;
-    const INFO_ISLAND_COUNT: i32 = 2;
+	const INFO_ACTIVE_OBJECTS: i32 = 0;
+	const INFO_COLLISION_PAIRS: i32 = 1;
+	const INFO_ISLAND_COUNT: i32 = 2;
 	match info {
 		INFO_ACTIVE_OBJECTS => {
 			let mut total = 0;
 			for (_, space) in SpaceIndex::read_all().iter() {
-				total += space.bodies().iter().filter(|(_, b)| !b.is_sleeping()).count();
+				total += space
+					.bodies()
+					.iter()
+					.filter(|(_, b)| !b.is_sleeping())
+					.count();
 			}
 			total.try_into().unwrap_or(i32::MAX)
 		}

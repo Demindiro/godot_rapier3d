@@ -6,9 +6,7 @@ use crate::space::Space;
 use crate::util::*;
 use core::convert::{TryFrom, TryInto};
 use gdnative::core_types::*;
-use rapier3d::dynamics::{
-	Axis, BodyStatus, MassProperties, RigidBody, RigidBodyHandle, RigidBodySet,
-};
+use rapier3d::dynamics::{MassProperties, RigidBody, RigidBodyHandle, RigidBodySet, RigidBodyType};
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
 };
@@ -244,7 +242,7 @@ impl Body {
 		for (i, e) in self.create_shapes().into_iter().enumerate() {
 			if let Some((shape, transform)) = e {
 				let mut collider = ColliderBuilder::new(shape)
-					.position_wrt_parent(*transform)
+					.position(*transform)
 					.collision_groups(self.collision_groups)
 					.restitution(self.restitution)
 					.friction(self.friction)
@@ -374,7 +372,7 @@ impl Body {
 		} else {
 			body.set_gravity_scale(1.0, current_gravity_scale != 1.0);
 		}
-		body.linear_damping = if let Some((d, i)) = self.area_linear_damp {
+		body.set_linear_damping(if let Some((d, i)) = self.area_linear_damp {
 			let i = i as f32;
 			if self.area_replace {
 				d / i
@@ -387,8 +385,8 @@ impl Body {
 			space_linear_damp
 		} else {
 			self.linear_damp
-		};
-		body.angular_damping = if let Some((d, i)) = self.area_angular_damp {
+		});
+		body.set_angular_damping(if let Some((d, i)) = self.area_angular_damp {
 			let i = i as f32;
 			if self.area_replace {
 				d / i
@@ -401,7 +399,7 @@ impl Body {
 			space_linear_damp
 		} else {
 			self.linear_damp
-		};
+		});
 		self.area_gravity = None;
 		self.area_linear_damp = None;
 		self.area_angular_damp = None;
@@ -512,13 +510,13 @@ impl Body {
 
 	/// Sets whether this body should sleep or not
 	pub fn set_sleeping(&mut self, sleep: bool) {
-		self.map_rigidbody_mut(|body| body.activation.sleeping = sleep);
+		self.map_rigidbody_mut(|body| body.activation_mut().sleeping = sleep);
 	}
 
 	/// Sets the energy threshold when this body will wake up or sleep.
 	/// A negative value disables sleep.
 	pub fn set_sleep_threshold(&mut self, threshold: f32) {
-		self.map_rigidbody_mut(|body| body.activation.threshold = threshold);
+		self.map_rigidbody_mut(|body| body.activation_mut().threshold = threshold);
 	}
 
 	/// Attach or remove a object id to this body.
@@ -671,7 +669,7 @@ impl Body {
 	}
 
 	/// Sets whether this body is static, kinematic or dynamic
-	pub fn set_body_status(&mut self, status: BodyStatus) {
+	pub fn set_body_type(&mut self, status: RigidBodyType) {
 		match &mut self.body {
 			Instance::Attached((rb, _), space) => {
 				space
@@ -679,25 +677,25 @@ impl Body {
 						s.bodies_mut()
 							.get_mut(*rb)
 							.expect("Invalid body handle")
-							.set_body_status(status)
+							.set_body_type(status)
 					})
 					.expect("Invalid space");
 			}
 			Instance::Loose(body) => {
-				body.set_body_status(status);
+				body.set_body_type(status);
 			}
 		}
 	}
 
 	/// Sets the groups of this body
 	pub fn set_groups(&mut self, groups: u32) {
-		self.collision_groups = self.collision_groups.with_groups(groups);
+		self.collision_groups = self.collision_groups.with_memberships(groups);
 		self.update_interaction_groups();
 	}
 
 	/// Sets the mask of this body
 	pub fn set_mask(&mut self, mask: u32) {
-		self.collision_groups = self.collision_groups.with_mask(mask);
+		self.collision_groups = self.collision_groups.with_filter(mask);
 		self.update_interaction_groups();
 	}
 
@@ -720,12 +718,12 @@ impl Body {
 
 	/// Sets the linear damp of this body
 	pub fn set_linear_damp(&mut self, damp: f32) {
-		self.map_rigidbody_mut(|body| body.linear_damping = damp);
+		self.map_rigidbody_mut(|body| body.set_linear_damping(damp));
 	}
 
 	/// Sets the angular damp of this body
 	pub fn set_angular_damp(&mut self, damp: f32) {
-		self.map_rigidbody_mut(|body| body.angular_damping = damp);
+		self.map_rigidbody_mut(|body| body.set_angular_damping(damp));
 	}
 
 	/// Sets the gravity scale of this body. This wakes up the body.
@@ -736,13 +734,13 @@ impl Body {
 	/// Sets the restitution of this body and it's colliders, if any.
 	pub fn set_restitution(&mut self, restitution: f32) {
 		self.restitution = restitution;
-		self.map_colliders(|collider| collider.restitution = restitution);
+		self.map_colliders(|collider| collider.set_restitution(restitution));
 	}
 
 	/// Sets the friction of this body and it's colliders, if any.
 	pub fn set_friction(&mut self, friction: f32) {
 		self.friction = friction;
-		self.map_colliders(|collider| collider.friction = friction);
+		self.map_colliders(|collider| collider.set_friction(friction));
 	}
 
 	/// Removes the given shape from this body and any colliders
@@ -820,13 +818,21 @@ impl Body {
 	/// Locks this body in place at it's current position, which prevents it from being pushed
 	/// by external forces. It may still rotate around it's origin.
 	pub fn set_translation_lock(&mut self, lock: bool) {
-		self.map_rigidbody_mut(|body| body.set_translation_locked(lock));
+		self.map_rigidbody_mut(|body| body.lock_translations(lock, false));
 	}
 
 	/// Prevents this body from rotating due to external forces. It can
 	/// still be translated however. The axis is defined in global space.
 	pub fn set_rotation_lock(&mut self, axis: Axis, lock: bool) {
-		self.map_rigidbody_mut(|body| body.set_rotation_locked(axis, lock));
+		self.map_rigidbody_mut(|body| {
+			let [mut x, mut y, mut z] = body.is_rotation_locked();
+			match axis {
+				Axis::X => x = lock,
+				Axis::Y => y = lock,
+				Axis::Z => z = lock,
+			}
+			body.restrict_rotations(x, y, z, false);
+		});
 	}
 
 	/// Returns whether this body is locked in place
