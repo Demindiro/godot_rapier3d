@@ -19,6 +19,8 @@ PluggablePhysicsServer::PluggablePhysicsServer() {
 
 PluggablePhysicsServer::~PluggablePhysicsServer() {
 	this->library->terminate();
+	memdelete(this->body_state_singleton);
+	memdelete(this->space_state_singleton);
 }
 
 void PluggablePhysicsServer::_bind_methods() {

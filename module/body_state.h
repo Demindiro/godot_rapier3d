@@ -16,7 +16,6 @@ class PluggablePhysicsDirectBodyState : public PhysicsDirectBodyState {
 	_FORCE_INLINE_ PluggablePhysicsDirectBodyState(PluggablePhysicsServer *p_server) {
 		this->server = p_server;
 	}
-	_FORCE_INLINE_ ~PluggablePhysicsDirectBodyState() {}
 
 	struct physics_body_state state;
 	mutable struct physics_body_contact contact;
