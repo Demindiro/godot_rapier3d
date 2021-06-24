@@ -294,7 +294,7 @@ impl Space {
 
 	/// Make two bodies not interact with each other.
 	/// Returns `Ok` if the bodies did not exclude each other already, `Err` otherwise.
-	pub fn add_body_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
+	pub fn add_body_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionAlreadyExists> {
 		self.body_exclusions.add_exclusion(index_a, index_b)
 	}
 
@@ -304,7 +304,7 @@ impl Space {
 		&mut self,
 		index_a: BodyIndex,
 		index_b: BodyIndex,
-	) -> Result<(), ()> {
+	) -> Result<(), ExclusionDoesntExist> {
 		self.body_exclusions.remove_exclusion(index_a, index_b)
 	}
 
@@ -524,6 +524,12 @@ impl Space {
 	}
 }
 
+#[derive(Debug)]
+pub struct ExclusionAlreadyExists;
+
+#[derive(Debug)]
+pub struct ExclusionDoesntExist;
+
 impl BodyExclusionHooks {
 	fn new(contacts_sender: Sender<(BodyIndex, body::ContactEvent)>) -> Self {
 		Self {
@@ -532,7 +538,7 @@ impl BodyExclusionHooks {
 		}
 	}
 
-	fn add_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
+	fn add_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionAlreadyExists> {
 		// TODO how should we handle self-exclusions? (index_a == index_b)
 		let (a, b) = (index_a, index_b);
 		let (a, b) = if a.index() < b.index() {
@@ -542,7 +548,7 @@ impl BodyExclusionHooks {
 		};
 		if let Some(vec) = self.exclusions.get_mut(a.index() as usize) {
 			if vec.contains(&b) {
-				Err(())
+				Err(ExclusionAlreadyExists)
 			} else {
 				vec.push(b);
 				Ok(())
@@ -557,7 +563,7 @@ impl BodyExclusionHooks {
 
 	// TODO implement body_remove_exception and remove the allow
 	#[allow(dead_code)]
-	fn remove_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ()> {
+	fn remove_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionDoesntExist> {
 		let (a, b) = (index_a, index_b);
 		let (a, b) = if a.index() < b.index() {
 			(a, b)
@@ -565,10 +571,10 @@ impl BodyExclusionHooks {
 			(b, a)
 		};
 		if let Some(vec) = self.exclusions.get_mut(a.index() as usize) {
-			vec.swap_remove(vec.iter().position(|&e| e == b).ok_or(())?);
+			vec.swap_remove(vec.iter().position(|&e| e == b).ok_or(ExclusionDoesntExist)?);
 			Ok(())
 		} else {
-			Err(())
+			Err(ExclusionDoesntExist)
 		}
 	}
 }

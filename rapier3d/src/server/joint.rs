@@ -148,6 +148,7 @@ fn create_hinge(
 	body_b: Index,
 	transform_b: &Transform,
 ) -> Option<Index> {
+	dbg!("CREATE MEEEEE");
 	let body_a = if let Index::Body(index) = body_a {
 		index
 	} else {
@@ -191,8 +192,11 @@ fn create_hinge(
 }
 
 fn disable_collisions_between_bodies(joint: Index, disable: bool) {
-	let enable = !disable;
+	dbg!("I live you shit");
+	// *disable* collisions = *enable* exclusion
+	let enable = disable;
 	map_or_err!(joint, map_joint_mut, |joint, _| {
+		dbg!(joint.exclude_bodies, enable);
 		if joint.exclude_bodies != enable {
 			joint.exclude_bodies = enable;
 			if let Instance::Attached(joint, space) = joint.joint {
@@ -204,17 +208,11 @@ fn disable_collisions_between_bodies(joint: Index, disable: bool) {
 					let b = space.bodies().get(joint.body2).expect("Invalid body B");
 					let a = body::RigidBodyUserdata::try_from(a).unwrap().index();
 					let b = body::RigidBodyUserdata::try_from(b).unwrap().index();
-					let result = if enable {
-						space.add_body_exclusion(a, b)
+					// Adding an exclusion multiple times is valid.
+					if enable {
+						let _ = space.add_body_exclusion(a, b);
 					} else {
-						space.remove_body_exclusion(a, b)
-					};
-					if let Err(e) = result {
-						if enable {
-							godot_error!("Failed to add bodies: {:?}", e);
-						} else {
-							godot_error!("Failed to remove bodies: {:?}", e);
-						}
+						let _ = space.remove_body_exclusion(a, b);
 					}
 				});
 			}
