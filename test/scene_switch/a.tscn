@@ -5,13 +5,13 @@
 [node name="Switch scene A" type="Node"]
 
 [node name="RigidBody" parent="." instance=ExtResource( 1 )]
-transform = Transform( 0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 0, 7 )
+transform = Transform( 0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, -13, 0, 1 )
 
 [node name="RigidBody2" parent="." instance=ExtResource( 1 )]
 transform = Transform( 0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 0, 7 )
 
 [node name="RigidBody3" parent="." instance=ExtResource( 1 )]
-transform = Transform( 0.0500843, 0.976356, -0.210287, -0.977322, 0.00453573, -0.211711, -0.205751, 0.216122, 0.954441, 0, 0, -8 )
+transform = Transform( 0.0500842, 0.976356, -0.210288, -0.977322, 0.0045355, -0.211711, -0.205751, 0.216122, 0.954441, 0, 0, -8 )
 
 [node name="RigidBody4" parent="." instance=ExtResource( 1 )]
 transform = Transform( -0.965926, 0, 0.258819, 0, 1, 0, -0.258819, 0, -0.965926, 10, 0, 7 )

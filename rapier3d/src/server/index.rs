@@ -106,7 +106,7 @@ impl SpaceIndex {
 impl Index {
 	/// A value that represents an invalid index as a u64.
 	#[allow(unused)]
-	const INVALID_RAW: u64 = 0;
+	pub const INVALID_RAW: u64 = 0;
 
 	/// Converts an Index into an u64
 	pub fn raw(self) -> u64 {

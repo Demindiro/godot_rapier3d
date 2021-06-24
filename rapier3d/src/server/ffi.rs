@@ -48,8 +48,8 @@ impl FFI {
 }
 
 impl PhysicsBodyState {
-	pub fn set_space(&mut self, index: Index) {
-		self.space = index.raw();
+	pub fn set_space(&mut self, index: Option<Index>) {
+		self.space = index.map(Index::raw).unwrap_or(Index::INVALID_RAW);
 	}
 
 	pub fn set_transform(&mut self, transform: &Transform) {

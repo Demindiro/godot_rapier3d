@@ -256,22 +256,20 @@ fn attach_object_instance_id(body: Index, id: u32) {
 fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 	map_or_err!(body, map_body, |body, _| {
 		body.read_body(|rb, space| {
-			if let Some(space) = space {
-				state.set_transform(&isometry_to_transform(rb.position()));
-				state.set_space(Index::Space(space));
-				state.set_linear_velocity(vec_na_to_gd(*rb.linvel()));
-				state.set_angular_velocity(vec_na_to_gd(*rb.angvel()));
-				state.set_sleeping(rb.is_sleeping());
-				state.set_linear_damp(rb.linear_damping);
-				state.set_angular_damp(rb.angular_damping);
-				let mp = rb.mass_properties();
-				state.set_inv_mass(mp.inv_mass);
-				let inv_inertia_sqrt = vec_na_to_gd(mp.inv_principal_inertia_sqrt);
-				state.set_inv_inertia(inv_inertia_sqrt.component_mul(inv_inertia_sqrt));
-				let inv_inertia_tensor = mp.reconstruct_inverse_inertia_matrix();
-				state.set_inv_inertia_tensor(&mat3_to_basis(&inv_inertia_tensor));
-				state.set_contact_count(body.contact_count());
-			}
+			state.set_transform(&isometry_to_transform(rb.position()));
+			state.set_linear_velocity(vec_na_to_gd(*rb.linvel()));
+			state.set_angular_velocity(vec_na_to_gd(*rb.angvel()));
+			state.set_sleeping(rb.is_sleeping());
+			state.set_linear_damp(rb.linear_damping);
+			state.set_angular_damp(rb.angular_damping);
+			let mp = rb.mass_properties();
+			state.set_inv_mass(mp.inv_mass);
+			let inv_inertia_sqrt = vec_na_to_gd(mp.inv_principal_inertia_sqrt);
+			state.set_inv_inertia(inv_inertia_sqrt.component_mul(inv_inertia_sqrt));
+			let inv_inertia_tensor = mp.reconstruct_inverse_inertia_matrix();
+			state.set_inv_inertia_tensor(&mat3_to_basis(&inv_inertia_tensor));
+			state.set_contact_count(body.contact_count());
+			state.set_space(space.map(Index::Space));
 		});
 	});
 }
