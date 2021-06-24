@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://test/scene_switch/body.tscn" type="PackedScene" id=1]
+
+[node name="Switch scene B" type="Node"]
+
+[node name="RigidBody" parent="." instance=ExtResource( 1 )]
