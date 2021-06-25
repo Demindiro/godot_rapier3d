@@ -19,6 +19,8 @@ pub type PhysicsBodyContact = physics_body_contact;
 pub type PhysicsAreaMonitorEvent = physics_area_monitor_event;
 pub type PhysicsRayResult = physics_ray_result;
 pub type PhysicsRayInfo = physics_ray_info;
+pub type PhysicsShapeResult = physics_shape_result;
+pub type PhysicsShapeInfo = physics_shape_info;
 
 #[macro_export]
 macro_rules! gdphysics_init {
@@ -195,6 +197,56 @@ impl PhysicsRayInfo {
 
 	pub fn pick_ray(&self) -> bool {
 		self.pick_ray
+	}
+}
+
+impl PhysicsShapeResult {
+	pub fn set_index(&mut self, index: Index) {
+		self.id = index.raw();
+	}
+
+	pub fn set_object_id(&mut self, id: Option<ObjectID>) {
+		self.object_id = id.map(ObjectID::get).unwrap_or(0) as i32;
+	}
+
+	pub fn set_shape(&mut self, index: u32) {
+		self.shape = index as i32;
+	}
+}
+
+#[derive(Debug)]
+pub enum InvalidShapeIndex {
+	NotAShape,
+	InvalidIndex(super::InvalidIndex),
+}
+
+impl PhysicsShapeInfo {
+	pub fn shape(&self) -> Result<super::ShapeIndex, InvalidShapeIndex> {
+		Index::from_raw(self.shape)
+			.map_err(InvalidShapeIndex::InvalidIndex)
+			.and_then(|i| i.as_shape().ok_or(InvalidShapeIndex::NotAShape))
+	}
+
+	pub fn transform(&self) -> &Transform {
+		// SAFETY: the two types are ABI-compatible.
+		unsafe { &*(self.transform as *const _ as *const _) }
+	}
+
+	pub fn exclude_raw<'a>(&'a self) -> &'a [u64] {
+		// SAFETY: exclude has at least as many elements as specified in exclude_count
+		unsafe { slice::from_raw_parts(self.exclude, self.exclude_count) }
+	}
+
+	pub fn collision_mask(&self) -> u32 {
+		self.collision_mask
+	}
+
+	pub fn collide_with_bodies(&self) -> bool {
+		self.collide_with_bodies
+	}
+
+	pub fn collide_with_areas(&self) -> bool {
+		self.collide_with_areas
 	}
 }
 

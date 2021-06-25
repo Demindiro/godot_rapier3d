@@ -172,13 +172,13 @@ fn map_type(t: &str) -> TokenStream {
 		}
 		_ if t.starts_with("godot_") => {
 			if let Some(t) = t.strip_suffix(" *") {
-				format!("&mut sys::{}", t).parse().unwrap()
+				format!("*mut sys::{}", t).parse().unwrap()
 			} else {
 				format!("sys::{}", t).parse().unwrap()
 			}
 		}
 		_ if t.starts_with("const godot_") && t.ends_with(" *") => {
-			format!("&sys::{}", &t["const ".len()..t.len() - " *".len()])
+			format!("*const sys::{}", &t["const ".len()..t.len() - " *".len()])
 				.parse()
 				.unwrap()
 		}
