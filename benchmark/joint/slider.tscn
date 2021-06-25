@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://benchmark/boxes/box_godot.tscn" type="PackedScene" id=1]
+
+[sub_resource type="BoxShape" id=1]
+
+[node name="Slider" type="Node"]
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 2, 8 )
+
+[node name="StaticBody" type="RigidBody" parent="."]
+axis_lock_linear_x = true
+axis_lock_linear_y = true
+axis_lock_linear_z = true
+axis_lock_angular_x = true
+axis_lock_angular_y = true
+axis_lock_angular_z = true
+
+[node name="CollisionShape" type="CollisionShape" parent="StaticBody"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0 )
+shape = SubResource( 1 )
+
+[node name="SliderJoint" type="SliderJoint" parent="."]
+transform = Transform( 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 0, 0, 1, 0, 0, 0 )
+nodes/node_a = NodePath("../StaticBody")
+nodes/node_b = NodePath("../Box")
+linear_limit/lower_distance = -6.0
+
+[node name="Box" parent="." instance=ExtResource( 1 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0 )
+mass = 1000.0

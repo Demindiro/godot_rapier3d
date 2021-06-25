@@ -148,7 +148,6 @@ fn create_hinge(
 	body_b: Index,
 	transform_b: &Transform,
 ) -> Option<Index> {
-	dbg!("CREATE MEEEEE");
 	let body_a = if let Index::Body(index) = body_a {
 		index
 	} else {
@@ -192,11 +191,9 @@ fn create_hinge(
 }
 
 fn disable_collisions_between_bodies(joint: Index, disable: bool) {
-	dbg!("I live you shit");
 	// *disable* collisions = *enable* exclusion
 	let enable = disable;
 	map_or_err!(joint, map_joint_mut, |joint, _| {
-		dbg!(joint.exclude_bodies, enable);
 		if joint.exclude_bodies != enable {
 			joint.exclude_bodies = enable;
 			if let Instance::Attached(joint, space) = joint.joint {
