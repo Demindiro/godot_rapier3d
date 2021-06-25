@@ -4,7 +4,7 @@ use crate::body::Body;
 use crate::util::*;
 use gdnative::core_types::*;
 use gdnative::godot_error;
-use rapier3d::dynamics::{ActivationStatus, Axis, BodyStatus, RigidBody, RigidBodyBuilder};
+use rapier3d::dynamics::{RigidBody, RigidBodyActivation, RigidBodyBuilder, RigidBodyType};
 
 #[derive(Debug)]
 enum Type {
@@ -71,7 +71,7 @@ impl Type {
 	fn create_body(&self, sleep: bool) -> RigidBody {
 		match self {
 			Type::Static => RigidBodyBuilder::new_static(),
-			Type::Kinematic => RigidBodyBuilder::new_kinematic(),
+			Type::Kinematic => RigidBodyBuilder::new_kinematic_position_based(),
 			Type::Rigid => RigidBodyBuilder::new_dynamic(),
 			Type::Character => RigidBodyBuilder::new_dynamic(),
 		}
@@ -260,8 +260,8 @@ fn get_direct_state(body: Index, state: &mut ffi::PhysicsBodyState) {
 			state.set_linear_velocity(vec_na_to_gd(*rb.linvel()));
 			state.set_angular_velocity(vec_na_to_gd(*rb.angvel()));
 			state.set_sleeping(rb.is_sleeping());
-			state.set_linear_damp(rb.linear_damping);
-			state.set_angular_damp(rb.angular_damping);
+			state.set_linear_damp(rb.linear_damping());
+			state.set_angular_damp(rb.angular_damping());
 			let mp = rb.mass_properties();
 			state.set_inv_mass(mp.inv_mass);
 			let inv_inertia_sqrt = vec_na_to_gd(mp.inv_principal_inertia_sqrt);
@@ -326,15 +326,15 @@ fn set_mode(body: Index, mode: i32) {
 	match Mode::new(mode) {
 		Ok(mode) => {
 			let mode = match mode {
-				Mode::Static => BodyStatus::Static,
-				Mode::Kinematic => BodyStatus::Kinematic,
-				Mode::Rigid => BodyStatus::Dynamic,
+				Mode::Static => RigidBodyType::Static,
+				Mode::Kinematic => RigidBodyType::KinematicPositionBased,
+				Mode::Rigid => RigidBodyType::Dynamic,
 				Mode::Character => {
 					godot_error!("Character mode is not supported");
 					return;
 				}
 			};
-			map_or_err!(body, map_body_mut, |body, _| body.set_body_status(mode));
+			map_or_err!(body, map_body_mut, |body, _| body.set_body_type(mode));
 		}
 		Err(_) => godot_error!("Invalid mode"),
 	}
@@ -379,7 +379,7 @@ fn set_state(body: Index, state: i32, value: &Variant) {
 				State::AngularVelocity(vel) => body.set_angular_velocity(vel),
 				State::Sleeping(sleep) => body.set_sleeping(sleep),
 				State::CanSleep(sleep) => body.set_sleep_threshold(if sleep {
-					ActivationStatus::default_threshold()
+					RigidBodyActivation::default_threshold()
 				} else {
 					-1.0
 				}),

@@ -1,7 +1,7 @@
 use super::*;
 use crate::util::*;
-use core::mem;
 use core::convert::TryFrom;
+use core::mem;
 use gdnative::core_types::*;
 use rapier3d::geometry::{Collider, ColliderBuilder, SharedShape};
 use rapier3d::math::Point;
@@ -326,7 +326,7 @@ impl Shape {
 	/// Creates a new collider based on the given position and scale
 	pub fn build(&self, position: Isometry3<f32>, scale: Vector3, sensor: bool) -> Collider {
 		ColliderBuilder::new(self.build_shape(position, scale))
-			.position_wrt_parent(position)
+			.position(position)
 			.sensor(sensor)
 			.build()
 	}
@@ -388,7 +388,7 @@ fn set_data(shape: Index, data: &Variant) {
 }
 
 fn get_data(shape: Index) -> gdnative::sys::godot_variant {
-	map_or_err!(shape, map_shape, |shape, _| {
-		shape.data()
-	}).unwrap_or(Variant::new()).forget()
+	map_or_err!(shape, map_shape, |shape, _| { shape.data() })
+		.unwrap_or(Variant::new())
+		.forget()
 }

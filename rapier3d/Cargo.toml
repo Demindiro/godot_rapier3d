@@ -8,7 +8,7 @@ edition = "2018"
 name = "godot_rapier3d"
 
 [dependencies]
-rapier3d = { git = "https://github.com/Demindiro/rapier", branch = "godot", version = "*", features = ["simd-nightly"] }
+rapier3d = { git = "https://github.com/Demindiro/rapier", branch = "godot-0.9", version = "*", features = ["simd-nightly"] }
 gdnative = "*"
 lazy_static = "*"
 

@@ -307,7 +307,7 @@ impl Area {
 	/// Sets the space of this area. This removes the area from it's current space, if any.
 	pub fn set_space(&mut self, space: Option<SpaceIndex>) {
 		// Judging by the API areas are intended to be moved around, so use kinematic
-		let instance = Instance::Loose(RigidBodyBuilder::new_kinematic().build());
+		let instance = Instance::Loose(RigidBodyBuilder::new_kinematic_position_based().build());
 		let instance = mem::replace(&mut self.instance, instance);
 		let body = match instance {
 			Instance::Attached((body, _), space) => space
@@ -493,12 +493,12 @@ impl Area {
 
 	/// Sets the collision layer of this area
 	pub fn set_layer(&mut self, layer: u32) {
-		self.interaction_groups = self.interaction_groups.with_groups(layer);
+		self.interaction_groups = self.interaction_groups.with_memberships(layer);
 	}
 
-	/// Sets the collision masj of this area
+	/// Sets the collision mask of this area
 	pub fn set_mask(&mut self, mask: u32) {
-		self.interaction_groups = self.interaction_groups.with_mask(mask);
+		self.interaction_groups = self.interaction_groups.with_filter(mask);
 	}
 
 	/// Stores the area's index in the given [`Collider`]
