@@ -111,6 +111,12 @@ API_CUSTOM_FUNCTIONS = {
         ('const struct physics_ray_info *', 'info'),
         ('struct physics_ray_result *', 'result'),
     ]),
+    'space_intersect_shape': ('size_t', [
+        ('index_t', 'space'),
+        ('const struct physics_shape_info *', 'info'),
+        ('struct physics_shape_result *', 'result'),
+        ('size_t', 'max_results'),
+    ]),
     'soft_body_get_collision_exception': ('index_t', [
         ('index_t', 'body'),
         ('int', 'index')
@@ -161,6 +167,21 @@ API_STRUCTS = {
     'physics_ray_result': [
         ('godot_vector3', 'position'),
         ('godot_vector3', 'normal'),
+        ('index_t', 'id'),
+        ('int', 'object_id'),
+        ('int', 'shape'),
+    ],
+    'physics_shape_info': [
+        ('index_t', 'shape'),
+        ('const godot_transform *', 'transform'),
+        ('const index_t *', 'exclude'),
+        ('size_t', 'exclude_count'),
+        ('size_t', 'max_results'),
+        ('uint32_t', 'collision_mask'),
+        ('bool', 'collide_with_bodies'),
+        ('bool', 'collide_with_areas'),
+    ],
+    'physics_shape_result': [
         ('index_t', 'id'),
         ('int', 'object_id'),
         ('int', 'shape'),

@@ -67,6 +67,11 @@ pub struct RayCastResult {
 	pub shape: u32,
 }
 
+pub struct IntersectShapeResult {
+	pub index: BodyOrAreaIndex,
+	pub shape: u32,
+}
+
 struct BodyExclusionHooks {
 	// Reasoning for using Vec and Box instead of HashMap & HashSet:
 	// * SparseVec is likely densely packed -> not many "holes" in the Vec.
@@ -294,7 +299,11 @@ impl Space {
 
 	/// Make two bodies not interact with each other.
 	/// Returns `Ok` if the bodies did not exclude each other already, `Err` otherwise.
-	pub fn add_body_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionAlreadyExists> {
+	pub fn add_body_exclusion(
+		&mut self,
+		index_a: BodyIndex,
+		index_b: BodyIndex,
+	) -> Result<(), ExclusionAlreadyExists> {
 		self.body_exclusions.add_exclusion(index_a, index_b)
 	}
 
@@ -334,6 +343,7 @@ impl Space {
 
 	/// Adds a collider and returns a handle to it.
 	pub fn add_collider(&mut self, collider: Collider, body: RigidBodyHandle) -> ColliderHandle {
+		self.query_pipeline_out_of_date = true;
 		self.colliders
 			.insert_with_parent(collider, body, &mut self.bodies)
 	}
@@ -409,7 +419,7 @@ impl Space {
 			max_toi,
 			// TODO what is the solid parameter for?
 			false,
-			InteractionGroups::new(u32::MAX, mask),
+			InteractionGroups::new(0, mask),
 			Some(&filter),
 		);
 		intersection.map(|(collider, intersection)| {
@@ -434,6 +444,77 @@ impl Space {
 				}
 			}
 		})
+	}
+
+	/// Return all colliders intersecting with the given shape at the given positions.
+	pub fn intersect_shape(
+		&mut self,
+		shape: &dyn Shape,
+		position: &Transform,
+		mask: u32,
+		exclude_bodies: Option<&[BodyIndex]>,
+		exclude_areas: Option<&[AreaIndex]>,
+		max_results: usize,
+	) -> impl Iterator<Item = IntersectShapeResult> {
+		dbg!(position, mask, exclude_areas, exclude_bodies, max_results);
+		self.update_query_pipeline();
+		let position = transform_to_isometry(*position);
+		let s = &*self;
+		let filter = match (exclude_bodies, exclude_areas) {
+			(Some(bodies), Some(areas)) => Box::new(move |c| {
+				let c = s.colliders.get(c).unwrap();
+				if let Ok(ud) = body::ColliderUserdata::try_from(c) {
+					!bodies.contains(&ud.index())
+				} else {
+					let ud =
+						area::ColliderUserdata::try_from(c).expect("Invalid collider userdata");
+					!areas.contains(&ud.index())
+				}
+			}) as Box<dyn Fn(ColliderHandle) -> bool>,
+			(Some(bodies), None) => Box::new(move |c| {
+				let c = s.colliders.get(c).unwrap();
+				if let Ok(ud) = body::ColliderUserdata::try_from(c) {
+					!bodies.contains(&ud.index())
+				} else {
+					false
+				}
+			}) as Box<dyn Fn(ColliderHandle) -> bool>,
+			(None, Some(areas)) => Box::new(move |c| {
+				let c = s.colliders.get(c).unwrap();
+				if let Ok(ud) = area::ColliderUserdata::try_from(c) {
+					!areas.contains(&ud.index())
+				} else {
+					false
+				}
+			}) as Box<dyn Fn(ColliderHandle) -> bool>,
+			(None, None) => return Vec::new().into_iter(),
+		};
+
+		let mut results = Vec::new();
+		self.query_pipeline.intersections_with_shape(
+			&self.colliders,
+			&position,
+			shape,
+			InteractionGroups::new(0, mask),
+			Some(&filter),
+			|handle| {
+				let c = &self.colliders[handle];
+				results.push(if let Ok(c) = body::ColliderUserdata::try_from(c) {
+					IntersectShapeResult {
+						index: BodyOrAreaIndex::Body(c.index()),
+						shape: c.shape(),
+					}
+				} else {
+					let c = area::ColliderUserdata::try_from(c).expect("Invalid collider userdata");
+					IntersectShapeResult {
+						index: BodyOrAreaIndex::Area(c.index()),
+						shape: c.shape(),
+					}
+				});
+				results.len() <= max_results
+			},
+		);
+		results.into_iter()
 	}
 
 	/// Returns the gravity vector of this space
@@ -538,7 +619,11 @@ impl BodyExclusionHooks {
 		}
 	}
 
-	fn add_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionAlreadyExists> {
+	fn add_exclusion(
+		&mut self,
+		index_a: BodyIndex,
+		index_b: BodyIndex,
+	) -> Result<(), ExclusionAlreadyExists> {
 		// TODO how should we handle self-exclusions? (index_a == index_b)
 		let (a, b) = (index_a, index_b);
 		let (a, b) = if a.index() < b.index() {
@@ -563,7 +648,11 @@ impl BodyExclusionHooks {
 
 	// TODO implement body_remove_exception and remove the allow
 	#[allow(dead_code)]
-	fn remove_exclusion(&mut self, index_a: BodyIndex, index_b: BodyIndex) -> Result<(), ExclusionDoesntExist> {
+	fn remove_exclusion(
+		&mut self,
+		index_a: BodyIndex,
+		index_b: BodyIndex,
+	) -> Result<(), ExclusionDoesntExist> {
 		let (a, b) = (index_a, index_b);
 		let (a, b) = if a.index() < b.index() {
 			(a, b)
@@ -571,7 +660,11 @@ impl BodyExclusionHooks {
 			(b, a)
 		};
 		if let Some(vec) = self.exclusions.get_mut(a.index() as usize) {
-			vec.swap_remove(vec.iter().position(|&e| e == b).ok_or(ExclusionDoesntExist)?);
+			vec.swap_remove(
+				vec.iter()
+					.position(|&e| e == b)
+					.ok_or(ExclusionDoesntExist)?,
+			);
 			Ok(())
 		} else {
 			Err(ExclusionDoesntExist)

@@ -54,7 +54,47 @@ bool PluggablePhysicsDirectSpaceState::intersect_ray(const Vector3 &from, const 
 }
 
 int PluggablePhysicsDirectSpaceState::intersect_shape(const RID &shape, const Transform &xform, float margin, PhysicsDirectSpaceState::ShapeResult *r_results, int result_max, const Set<RID> &exclude, uint32_t collision_mask, bool collide_with_bodies, bool collide_with_areas) {
-	ERR_FAIL_V_MSG(0, "TODO");
+	ERR_FAIL_COND_V_MSG(this->server->fn_table.space_intersect_shape == nullptr, false, "Not implemented");
+
+	index_t *e_list = memnew_arr_template<index_t>(exclude.size());
+	size_t i = 0;
+	for (typename Set<RID>::Element *rid = exclude.front(); rid != nullptr; rid = rid->next()) {
+		e_list[i++] = this->server->get_index(rid->get());
+	}
+
+	index_t shape_id = this->server->get_index(shape);
+
+	struct physics_shape_info info = {
+		shape_id,
+		&xform,
+		e_list,
+		(size_t)exclude.size(),
+		(size_t)result_max,
+		collision_mask,
+		collide_with_bodies,
+		collide_with_areas,
+	};
+	struct physics_shape_result *psr_arr = memnew_arr_template<struct physics_shape_result>(result_max);
+	size_t result_count = (*this->server->fn_table.space_intersect_shape)(this->space, &info, psr_arr, (size_t)result_max);
+
+	// Apparently this function doesn't like it if e_list is null (which can happen if exclude.size() == 0)
+	if (e_list != nullptr) {
+		memdelete_arr(e_list);
+	}
+
+	for (i = 0; i < result_count; i++) {
+		struct physics_shape_result *psr = &psr_arr[i];
+		r_results[i].rid = this->server->get_rid(psr->id);
+		r_results[i].collider_id = psr->object_id;
+		r_results[i].collider = psr->object_id == 0 ? nullptr : ObjectDB::get_instance(psr->object_id);
+		r_results[i].shape = psr->shape;
+	}
+
+	if (psr_arr != nullptr) {
+		memdelete_arr(psr_arr);
+	}
+
+	return (int)result_count;
 }
 
 bool PluggablePhysicsDirectSpaceState::cast_motion(const RID &shape, const Transform &xform, const Vector3 &motion, float margin, float &closest_safe, float &closest_unsafe, const Set<RID> &exclude, uint32_t collision_mask, bool collide_with_bodies, bool collide_with_areas, PhysicsDirectSpaceState::ShapeRestInfo *r_info) {

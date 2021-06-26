@@ -6,13 +6,13 @@ use crate::space::Space;
 use crate::util::*;
 use core::convert::{TryFrom, TryInto};
 use gdnative::core_types::*;
-use rapier3d::prelude::*;
 use rapier3d::dynamics::{MassProperties, RigidBody, RigidBodyHandle, RigidBodySet, RigidBodyType};
 use rapier3d::geometry::{
 	Collider, ColliderBuilder, ColliderHandle, InteractionGroups, SharedShape,
 };
 use rapier3d::math::Isometry;
 use rapier3d::na::{self, Point3};
+use rapier3d::prelude::*;
 
 pub struct BodyShape {
 	index: ShapeIndex,
@@ -179,7 +179,9 @@ impl Body {
 						let shape_scale = vec_gd_to_na(self_scale).component_mul(&shape_scale);
 						let shape_scale = vec_na_to_gd(shape_scale);
 						let mut collider = shape.build(body_shape.transform, shape_scale, false);
-						collider.set_active_hooks(ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::MODIFY_SOLVER_CONTACTS);
+						collider.set_active_hooks(
+							ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::MODIFY_SOLVER_CONTACTS,
+						);
 						collider.set_active_events(ActiveEvents::INTERSECTION_EVENTS);
 						let collider = space.add_collider(collider, *rb);
 						colliders.push(Some(collider));
@@ -249,7 +251,9 @@ impl Body {
 					.collision_groups(self.collision_groups)
 					.restitution(self.restitution)
 					.friction(self.friction)
-					.active_hooks(ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::MODIFY_SOLVER_CONTACTS)
+					.active_hooks(
+						ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::MODIFY_SOLVER_CONTACTS,
+					)
 					.active_events(ActiveEvents::INTERSECTION_EVENTS)
 					.build();
 				collider.user_data = ColliderUserdata::new(
