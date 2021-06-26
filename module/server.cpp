@@ -27,14 +27,14 @@ void PluggablePhysicsServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("step", "delta"), &PluggablePhysicsServer::step);
 }
 
-void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object* receiver, const StringName &method) {
+void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object *receiver, const StringName &method) {
 	index_t id = this->get_index(area);
 	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
 	AreaCallback callback(receiver, method);
 	this->area_body_monitor_callbacks.set(id, callback);
 }
 
-void PluggablePhysicsServer::area_set_area_monitor_callback(RID area, Object* receiver, const StringName &method) {
+void PluggablePhysicsServer::area_set_area_monitor_callback(RID area, Object *receiver, const StringName &method) {
 	index_t id = this->get_index(area);
 	ERR_FAIL_COND_MSG(id == 0, "Invalid RID");
 	AreaCallback callback(receiver, method);
@@ -46,10 +46,10 @@ void PluggablePhysicsServer::body_get_collision_exceptions(RID body, List<RID> *
 }
 
 void PluggablePhysicsServer::init() {
-    Variant lib_path_variant = ProjectSettings::get_singleton()->get_setting("physics/3d/custom_library_path");
-    String lib_path = String(lib_path_variant);
+	Variant lib_path_variant = ProjectSettings::get_singleton()->get_setting("physics/3d/custom_library_path");
+	String lib_path = String(lib_path_variant);
 
-    if (lib_path != "") {
+	if (lib_path != "") {
 		Error err;
 		RES lib = ResourceLoader::load(lib_path, "", false, &err);
 		ERR_FAIL_COND_MSG(err, "Failed to load physics server library");
@@ -65,11 +65,10 @@ void PluggablePhysicsServer::init() {
 		// SAFETY: the callee must have the exact same signature
 		void (*init_func)(struct fn_table *) = reinterpret_cast<void (*)(struct fn_table *)>(handle);
 		init_func(&this->fn_table);
-    }
+	}
 }
 
 void PluggablePhysicsServer::step(float delta) {
-
 	EXEC_FFI_FN(this, step, delta);
 
 	const index_t *id = nullptr;
@@ -78,7 +77,6 @@ void PluggablePhysicsServer::step(float delta) {
 	// Execute force integration callbacks
 	ERR_FAIL_COND_MSG(this->fn_table.body_get_direct_state == nullptr, "Not implemented");
 	while ((id = this->body_force_integration_callbacks.next(id)) != nullptr) {
-
 		(*this->fn_table.body_get_direct_state)(*id, &this->body_state_singleton->state);
 
 		this->body_state_singleton->delta = delta;
@@ -108,7 +106,6 @@ void PluggablePhysicsServer::step(float delta) {
 	// Execute area <-> body monitor callbacks
 	ERR_FAIL_COND_MSG(this->fn_table.area_get_body_event == nullptr, "Not implemented");
 	while ((id = this->area_body_monitor_callbacks.next(id)) != nullptr) {
-		
 		struct physics_area_monitor_event event;
 
 		AreaCallback *callback = this->area_body_monitor_callbacks.getptr(*id);
@@ -142,7 +139,6 @@ void PluggablePhysicsServer::step(float delta) {
 	// Execute area <-> area monitor callbacks
 	ERR_FAIL_COND_MSG(this->fn_table.area_get_area_event == nullptr, "Not implemented");
 	while ((id = this->area_area_monitor_callbacks.next(id)) != nullptr) {
-		
 		struct physics_area_monitor_event event;
 
 		AreaCallback *callback = this->area_area_monitor_callbacks.getptr(*id);

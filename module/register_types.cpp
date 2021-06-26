@@ -14,12 +14,15 @@ PhysicsServer *_createPluggablePhysicsCallback() {
 
 void register_pluggable_physics_types() {
 #ifndef _3D_DISABLED
+	ClassDB::register_class<PluggablePhysicsServer>();
+	ClassDB::register_virtual_class<PluggablePhysicsDirectBodyState>();
+	ClassDB::register_virtual_class<PluggablePhysicsDirectSpaceState>();
 	PhysicsServerManager::register_server("Custom", &_createPluggablePhysicsCallback);
 
 	GLOBAL_DEF("physics/3d/custom_library_path", "");
 	String lib_path_prop = "physics/3d/custom_library_path";
 	PropertyInfo prop_info(Variant::STRING, lib_path_prop, PROPERTY_HINT_FILE, "*.gdnlib");
-    ProjectSettings::get_singleton()->set_custom_property_info(lib_path_prop, prop_info);
+	ProjectSettings::get_singleton()->set_custom_property_info(lib_path_prop, prop_info);
 #endif
 }
 
