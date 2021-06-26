@@ -456,7 +456,6 @@ impl Space {
 		exclude_areas: Option<&[AreaIndex]>,
 		max_results: usize,
 	) -> impl Iterator<Item = IntersectShapeResult> {
-		dbg!(position, mask, exclude_areas, exclude_bodies, max_results);
 		self.update_query_pipeline();
 		let position = transform_to_isometry(*position);
 		let s = &*self;
