@@ -18,91 +18,6 @@ pub enum Index {
 #[derive(Debug)]
 pub struct InvalidIndex;
 
-impl AreaIndex {
-	/// Creates a new AreaIndex with the given Index
-	pub fn new(i: u32, generation: u16) -> Self {
-		Self(i, generation)
-	}
-
-	/// Returns the inner index value
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-
-	/// Returns the generation of this AreaIndex
-	pub fn generation(&self) -> u16 {
-		self.1
-	}
-}
-
-impl BodyIndex {
-	/// Creates a new BodyIndex with the given Index
-	pub fn new(i: u32, generation: u16) -> Self {
-		Self(i, generation)
-	}
-
-	/// Returns the inner index value
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-
-	/// Returns the generation of this BodyIndex
-	pub fn generation(&self) -> u16 {
-		self.1
-	}
-}
-
-impl JointIndex {
-	/// Creates a new JointIndex with the given Index
-	pub fn new(i: u32, generation: u16) -> Self {
-		Self(i, generation)
-	}
-
-	/// Returns the inner index value
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-
-	/// Returns the generation of this JointIndex
-	pub fn generation(&self) -> u16 {
-		self.1
-	}
-}
-
-impl ShapeIndex {
-	/// Creates a new ShapeIndex with the given Index
-	pub fn new(i: u32, generation: u16) -> Self {
-		Self(i, generation)
-	}
-
-	/// Returns the inner index value
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-
-	/// Returns the generation of this ShapeIndex
-	pub fn generation(&self) -> u16 {
-		self.1
-	}
-}
-
-impl SpaceIndex {
-	/// Creates a new SpaceIndex with the given Index
-	pub fn new(i: u32, generation: u16) -> Self {
-		Self(i, generation)
-	}
-
-	/// Returns the inner index value
-	pub fn index(&self) -> u32 {
-		self.0
-	}
-
-	/// Returns the generation of this SpaceIndex
-	pub fn generation(&self) -> u16 {
-		self.1
-	}
-}
-
 impl Index {
 	/// A value that represents an invalid index as a u64.
 	#[allow(unused)]
@@ -141,6 +56,23 @@ macro_rules! generate {
 	($name:ident, $index:ident, $as:ident) => {
 		#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 		pub struct $index(u32, u16);
+
+		impl $index {
+			/// Creates a new $index with the given Index
+			pub fn new(i: u32, generation: u16) -> Self {
+				Self(i, generation)
+			}
+
+			/// Returns the inner index value
+			pub fn index(&self) -> u32 {
+				self.0
+			}
+
+			/// Returns the generation of this $index
+			pub fn generation(&self) -> u16 {
+				self.1
+			}
+		}
 
 		impl Index {
 			/// Returns the given index as a [`$index`] if it is one
