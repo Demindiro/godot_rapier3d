@@ -9,7 +9,7 @@ default: release
 
 release: linux
 
-linux: rapier3d/api.json
+linux: rapier3d/api.json addons/rapier3d/lib/
 	GODOT_PATH=$(GODOT) cargo build --quiet --target $(TARGET_LINUX) --release
 	cp target/$(TARGET_LINUX)/release/librapier3d.so $(OUTPUT_DIR)/librapier3d.so
 	strip $(OUTPUT_DIR)/librapier3d.so
@@ -27,6 +27,8 @@ clean:
 	rm module/api.json || true
 	rm module/api.gen.h || true
 
+addons/rapier3d/lib/:
+	mkdir $@
 
 rapier3d/api.json: module/api.json
 	cp module/api.json rapier3d/api.json
