@@ -136,9 +136,11 @@ impl BodyAxis {
 }
 
 pub fn init(ffi: &mut ffi::FFI) {
+	ffi!(ffi, body_add_central_force, add_central_force);
 	ffi!(ffi, body_add_force, add_force);
 	ffi!(ffi, body_add_shape, add_shape);
 	ffi!(ffi, body_add_collision_exception, add_collision_exception);
+	ffi!(ffi, body_apply_central_impulse, apply_central_impulse);
 	ffi!(ffi, body_apply_impulse, apply_impulse);
 	ffi!(
 		ffi,
@@ -226,6 +228,12 @@ fn add_collision_exception(body_a: Index, body_b: Index) {
 	}
 }
 
+fn add_central_force(body: Index, force: &Vector3) {
+	map_or_err!(body, map_body_mut, |body, _| {
+		body.add_central_force(*force);
+	});
+}
+
 fn add_force(body: Index, force: &Vector3, position: &Vector3) {
 	map_or_err!(body, map_body_mut, |body, _| {
 		let (position, force) = transform_force_arguments(body, position, force);
@@ -238,6 +246,12 @@ fn add_shape(body: Index, shape: Index, transform: &Transform, disabled: bool) {
 		map_or_err!(shape, map_shape_mut, |shape, _| {
 			body.add_shape(shape, transform, !disabled);
 		});
+	});
+}
+
+fn apply_central_impulse(body: Index, impulse: &Vector3) {
+	map_or_err!(body, map_body_mut, |body, _| {
+		body.add_central_impulse(*impulse);
 	});
 }
 
