@@ -14,6 +14,7 @@ use gdnative::core_types::*;
 use gdnative::sys;
 use std::slice;
 
+pub type PhysicsCallResult = physics_call_result;
 pub type PhysicsBodyState = physics_body_state;
 pub type PhysicsBodyContact = physics_body_contact;
 pub type PhysicsAreaMonitorEvent = physics_area_monitor_event;
@@ -21,16 +22,20 @@ pub type PhysicsRayResult = physics_ray_result;
 pub type PhysicsRayInfo = physics_ray_info;
 pub type PhysicsShapeResult = physics_shape_result;
 pub type PhysicsShapeInfo = physics_shape_info;
+pub type PhysicsServer = physics_server;
 
 #[macro_export]
 macro_rules! gdphysics_init {
 	($fn:ident) => {
 		#[no_mangle]
-		extern "C" fn gdphysics_init(table: *mut ffi::UnsafeApi) {
+		extern "C" fn gdphysics_init(server: *mut ffi::PhysicsServer, table: *mut ffi::UnsafeApi) {
 			if table.is_null() {
 				println!("Function table pointer is null");
 			} else {
-				let mut ffi = ffi::FFI::_new(table);
+				let mut ffi = ffi::FFI {
+					table,
+					server,
+				};
 				$fn(&mut ffi);
 			}
 		}
@@ -39,13 +44,122 @@ macro_rules! gdphysics_init {
 
 pub struct FFI {
 	pub table: *mut UnsafeApi,
+	pub server: *const PhysicsServer,
+}
+
+#[allow(dead_code)]
+pub enum VariantType {
+	Nil,
+	Bool,
+	Int,
+	Real,
+	String,
+	Vector2, // 5
+	Rect2,
+	Vector3,
+	Transform2d,
+	Plane,
+	Quat, // 10,
+	Aabb,
+	Basis,
+	Transform,
+	Color,
+	NodePath, // 15
+	Rid,
+	Object,
+	Dictionary,
+	Array,
+	PoolByteArray, // 20
+	PoolIntArray,
+	PoolRealArray,
+	PoolStringArray,
+	PoolVector2Array,
+	PoolVector3Array, // 25
+	PoolColorArray,
+}
+
+/// Error that may be returned for `ffi::call´
+pub enum PhysicsCallError {
+	InvalidMethod,
+	InvalidArgument {
+		argument: u8,
+		expected_type: VariantType,
+	},
+	TooManyArguments,
+	TooFewArguments,
+	InstanceIsNull,
 }
 
 use super::Index;
 
-impl FFI {
-	pub fn _new(table: *mut UnsafeApi) -> Self {
-		Self { table }
+impl From<VariantType> for u8 {
+	fn from(vt: VariantType) -> u8 {
+		match vt {
+			VariantType::Nil => 0,
+			VariantType::Bool => 1,
+			VariantType::Int => 2,
+			VariantType::Real => 3,
+			VariantType::String => 4,
+			VariantType::Vector2 => 5,
+			VariantType::Rect2 => 6,
+			VariantType::Vector3 => 7,
+			VariantType::Transform2d => 8,
+			VariantType::Plane => 9,
+			VariantType::Quat => 10,
+			VariantType::Aabb => 11,
+			VariantType::Basis => 12,
+			VariantType::Transform => 13,
+			VariantType::Color => 14,
+			VariantType::NodePath => 15,
+			VariantType::Rid => 16,
+			VariantType::Object => 17,
+			VariantType::Dictionary => 18,
+			VariantType::Array => 19,
+			VariantType::PoolByteArray => 20,
+			VariantType::PoolIntArray => 21,
+			VariantType::PoolRealArray => 22,
+			VariantType::PoolStringArray => 23,
+			VariantType::PoolVector2Array => 24,
+			VariantType::PoolVector3Array => 25,
+			VariantType::PoolColorArray => 26,
+		}
+	}
+}
+
+impl PhysicsCallError {
+	pub fn invalid_argument(argument: u8, expected_type: VariantType) -> Self {
+		Self::InvalidArgument { argument, expected_type }
+	}
+}
+
+impl PhysicsCallResult {
+	pub fn new(from: Result<Variant, PhysicsCallError>) -> Self {
+		match from {
+			Ok(v) => Self {
+				value: v.forget(),
+				status: 0,
+				argument: 0,
+				expected_type: 0,
+			},
+			Err(e) => Self {
+				value: Variant::new().forget(),
+				status: match &e {
+					PhysicsCallError::InvalidMethod => 1,
+					PhysicsCallError::InvalidArgument { .. } => 2,
+					PhysicsCallError::TooManyArguments => 3,
+					PhysicsCallError::TooFewArguments => 4,
+					PhysicsCallError::InstanceIsNull => 5,
+				},
+				argument: match &e {
+					PhysicsCallError::InvalidArgument { argument, .. } => *argument,
+					_ => 0,
+				},
+				expected_type: match e {
+					PhysicsCallError::InvalidArgument { expected_type, .. } => expected_type.into(),
+					_ => 0,
+				},
+			},
+		}
 	}
 }
 

@@ -25,6 +25,8 @@ PluggablePhysicsServer::~PluggablePhysicsServer() {
 
 void PluggablePhysicsServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("step", "delta"), &PluggablePhysicsServer::step);
+	ClassDB::bind_method(D_METHOD("get_rid", "index"), &PluggablePhysicsServer::get_rid);
+	ClassDB::bind_method(D_METHOD("get_index", "rid"), &PluggablePhysicsServer::get_index);
 }
 
 void PluggablePhysicsServer::area_set_monitor_callback(RID area, Object *receiver, const StringName &method) {
@@ -63,9 +65,28 @@ void PluggablePhysicsServer::init() {
 		ERR_FAIL_COND_MSG(err, "Failed to get init handle");
 
 		// SAFETY: the callee must have the exact same signature
-		void (*init_func)(struct fn_table *) = reinterpret_cast<void (*)(struct fn_table *)>(handle);
-		init_func(&this->fn_table);
+		void (*init_func)(const struct physics_server *ps, struct fn_table *) = reinterpret_cast<void (*)(const struct physics_server *ps, struct fn_table *)>(handle);
+		// SAFETY: it's just a pointer
+		const struct physics_server *ps = reinterpret_cast<struct physics_server *>(this);
+		// SAFETY: the two functions are ABI compatible.
+		this->fn_table.server_get_index = reinterpret_cast<index_t (*)(const struct physics_server *, godot_rid)>(&PluggablePhysicsServer::get_index);
+		// SAFETY: Ditto 
+		this->fn_table.server_get_rid = reinterpret_cast<godot_rid (*)(const struct physics_server *, index_t)>(&PluggablePhysicsServer::get_rid);
+		init_func(ps, &this->fn_table);
 	}
+}
+
+Variant PluggablePhysicsServer::call(const StringName &method, const Variant **args, int argcount, Variant::CallError &error) {
+	ERR_FAIL_COND_V_MSG(this->fn_table.call == nullptr, Variant(), "Not implemented");
+	// TODO find a way that avoids potential redundant malloc calls.
+	// Because malloc may return NULL the compiler isn't always able to optimize it out if it
+	// would have side effects (e.g. error message).
+	String m(method);
+	struct physics_call_result result = (*this->fn_table.call)(m.ptr(), args, (size_t)argcount);
+	error.error = (Variant::CallError::Error)result.status;
+	error.argument = result.argument;
+	error.expected = (Variant::Type)result.expected_type;
+	return result.value;
 }
 
 void PluggablePhysicsServer::step(float delta) {

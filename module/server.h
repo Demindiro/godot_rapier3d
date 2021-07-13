@@ -96,6 +96,12 @@ class PluggablePhysicsServer : public PhysicsServer {
 		return rid;
 	}
 
+	/**
+	 * Returns the index associated with a RID. An index is a 64 bit integer used internally by the
+	 * physics engine and is necessary to use any of the additional methods.
+	 *
+	 * Returns `0` if the RID is invalid.
+	 */
 	_FORCE_INLINE_ index_t get_index(RID rid) const {
 		if (rid.is_valid()) {
 			PluggablePhysicsRID_Data *data = this->rids.get(rid);
@@ -104,12 +110,18 @@ class PluggablePhysicsServer : public PhysicsServer {
 		return 0;
 	}
 
+	/**
+	 * Returns the RID associated with an index. An index is a 64 bit integer used internally by the
+	 * physics engine and is necessary to use any of the additional methods.
+	 */
 	_FORCE_INLINE_ RID get_rid(index_t index) const {
 		return index != 0 ? this->reverse_rids.get(index) : RID();
 	}
 
 protected:
 	static void _bind_methods();
+
+	Variant call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error);
 
 public:
 	PluggablePhysicsServer();

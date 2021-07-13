@@ -59,6 +59,7 @@ API_EXCLUDE = {
     'body_set_force_integration_callback',
     'body_get_direct_state',
     'body_get_collision_exceptions',
+    'call',
     'free',
     'soft_body_get_collision_exceptions',
     'soft_body_update_visual_server',
@@ -74,6 +75,11 @@ API_MAYBE_RIDS = {
 
 # Extra functions to add to the API
 API_CUSTOM_FUNCTIONS = {
+    'call': ('struct physics_call_result', [
+        ('const wchar_t *', 'method'),
+        ('const godot_variant **', 'args'),
+        ('size_t', 'arg_count'),
+    ]),
     'area_get_body_event': ('bool', [
         ('index_t', 'area'),
         ('struct physics_area_monitor_event *', 'event')
@@ -124,10 +130,24 @@ API_CUSTOM_FUNCTIONS = {
     'soft_body_get_collision_exception_count': ('int', [
         ('index_t', 'body')
     ]),
+    'server_get_index': ('index_t', [
+        ('const struct physics_server *', 'server'),
+        ('godot_rid', 'rid'),
+    ]),
+    'server_get_rid': ('godot_rid', [
+        ('const struct physics_server *', 'server'),
+        ('index_t', 'index'),
+    ]),
 }
 
 # Structs to include in the API
 API_STRUCTS = {
+    'physics_call_result': [
+        ('godot_variant', 'value'),
+        ('uint8_t', 'status'),
+        ('uint8_t', 'argument'),
+        ('uint8_t', 'expected_type'),
+    ],
     'physics_body_state': [
         ('godot_transform', 'transform'),
         ('godot_vector3', 'linear_velocity'),
@@ -190,7 +210,8 @@ API_STRUCTS = {
         ('index_t', 'id'),
         ('int', 'object_id'),
         ('bool', 'added'),
-    ]
+    ],
+    'physics_server': [],
 }
 
 # Functions for which to validate all RIDs

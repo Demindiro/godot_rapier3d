@@ -9,5 +9,6 @@ typedef Vector3 godot_vector3;
 typedef Variant godot_variant;
 typedef StringName godot_string_name;
 typedef Object godot_object;
+typedef RID godot_rid;
 
 #endif

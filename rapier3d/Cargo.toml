@@ -11,6 +11,7 @@ name = "godot_rapier3d"
 rapier3d = { git = "https://github.com/Demindiro/rapier", branch = "godot-0.9", version = "*", features = ["simd-nightly"] }
 gdnative = "*"
 lazy_static = "*"
+wchar = "*"
 
 [build-dependencies]
 json = "*"
