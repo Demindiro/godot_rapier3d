@@ -118,6 +118,17 @@ class PluggablePhysicsServer : public PhysicsServer {
 		return index != 0 ? this->reverse_rids.get(index) : RID();
 	}
 
+	// Every line of C++ I write makes me hate the language even more.
+	//
+	// See https://isocpp.org/wiki/faq/pointers-to-members
+	static index_t _get_index(const struct physics_server *server, godot_rid rid) {
+		return reinterpret_cast<const PluggablePhysicsServer *>(server)->get_index(rid);
+	}
+
+	static godot_rid _get_rid(const struct physics_server *server, index_t index) {
+		return reinterpret_cast<const PluggablePhysicsServer *>(server)->get_rid(index);
+	}
+
 protected:
 	static void _bind_methods();
 

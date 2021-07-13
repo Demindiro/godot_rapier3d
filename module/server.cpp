@@ -68,11 +68,10 @@ void PluggablePhysicsServer::init() {
 		void (*init_func)(const struct physics_server *ps, struct fn_table *) = reinterpret_cast<void (*)(const struct physics_server *ps, struct fn_table *)>(handle);
 		// SAFETY: it's just a pointer
 		const struct physics_server *ps = reinterpret_cast<struct physics_server *>(this);
-		// I have no idea why the compiler complains without (void *) here but it does work & it's valid AFAICT.
 		// SAFETY: the two functions are ABI compatible.
-		this->fn_table.server_get_index = reinterpret_cast<index_t (*)(const struct physics_server *, godot_rid)>(&PluggablePhysicsServer::get_index);
+		this->fn_table.server_get_index = _get_index;
 		// SAFETY: Ditto 
-		this->fn_table.server_get_rid = reinterpret_cast<godot_rid (*)(const struct physics_server *, index_t)>(&PluggablePhysicsServer::get_rid);
+		this->fn_table.server_get_rid = _get_rid;
 		init_func(ps, &this->fn_table);
 	}
 }
