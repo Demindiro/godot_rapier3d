@@ -49,8 +49,9 @@ impl Joint {
 		T: Into<JointParams> + Copy,
 	{
 		let params = joint.into();
-		let result = body_a.map(|body_a| {
-			body_b.map(|body_b| {
+		let bodies = BodyIndex::read_all();
+		let result = bodies.get(body_a.into()).and_then(|body_a| {
+			bodies.get(body_b.into()).and_then(|body_b| {
 				if let Some((body_a, space_a)) = body_a.as_attached() {
 					if let Some((body_b, space_b)) = body_b.as_attached() {
 						if space_a == space_b {
@@ -68,7 +69,7 @@ impl Joint {
 				None
 			})
 		});
-		if let Ok(Ok(Some((joint, space)))) = result {
+		if let Some((joint, space)) = result {
 			Self {
 				joint: Instance::Attached(joint, space),
 				exclude_bodies: false,

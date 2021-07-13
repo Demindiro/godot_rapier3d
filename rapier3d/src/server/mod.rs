@@ -22,15 +22,15 @@ pub use index::*;
 use joint::Joint;
 use rapier3d::na;
 pub use shape::Shape;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard};
 
 lazy_static::lazy_static! {
-	static ref ACTIVE: RwLock<bool> = RwLock::new(true);
-	static ref AREA_INDICES: RwLock<Indices<Area>> = RwLock::new(Indices::new());
-	static ref BODY_INDICES: RwLock<Indices<Body>> = RwLock::new(Indices::new());
-	static ref JOINT_INDICES: RwLock<Indices<Joint>> = RwLock::new(Indices::new());
-	static ref SHAPE_INDICES: RwLock<Indices<Shape>> = RwLock::new(Indices::new());
-	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
+	static ref ACTIVE: Mutex<bool> = Mutex::new(true);
+	static ref AREA_INDICES: Mutex<Indices<Area>> = Mutex::new(Indices::new());
+	static ref BODY_INDICES: Mutex<Indices<Body>> = Mutex::new(Indices::new());
+	static ref JOINT_INDICES: Mutex<Indices<Joint>> = Mutex::new(Indices::new());
+	static ref SHAPE_INDICES: Mutex<Indices<Shape>> = Mutex::new(Indices::new());
+	static ref SPACE_INDICES: Mutex<Indices<Space>> = Mutex::new(Indices::new());
 }
 
 static mut PHYSICS_SERVER: Option<*const ffi::PhysicsServer> = None;
@@ -67,9 +67,9 @@ pub trait MapIndex<T> {
 
 	fn remove(self) -> Result<T, IndexError>;
 
-	fn read_all() -> RwLockReadGuard<'static, Indices<T>>;
+	fn read_all() -> MutexGuard<'static, Indices<T>>;
 
-	fn write_all() -> RwLockWriteGuard<'static, Indices<T>>;
+	fn write_all() -> MutexGuard<'static, Indices<T>>;
 }
 
 trait MapEnumIndex {
@@ -155,14 +155,14 @@ macro_rules! map_index {
 				}
 			}
 
-			fn read_all() -> RwLockReadGuard<'static, Indices<$variant>> {
+			fn read_all() -> MutexGuard<'static, Indices<$variant>> {
 				const MSG: &str = concat!("Failed to read-lock ", stringify!($variant), " array");
-				$array.read().expect(MSG)
+				$array.lock().expect(MSG)
 			}
 
-			fn write_all() -> RwLockWriteGuard<'static, Indices<$variant>> {
+			fn write_all() -> MutexGuard<'static, Indices<$variant>> {
 				const MSG: &str = concat!("Failed to write-lock ", stringify!($variant), " array");
-				$array.write().expect(MSG)
+				$array.lock().expect(MSG)
 			}
 		}
 	};
@@ -281,7 +281,7 @@ gdphysics_init!(init);
 fn server_init() {}
 
 fn step(delta: f32) {
-	if *ACTIVE.read().expect("Failed to check ACTIVE") {
+	if *ACTIVE.lock().expect("Failed to check ACTIVE") {
 		for (_, area) in AreaIndex::write_all().iter_mut() {
 			area.clear_events();
 		}
@@ -347,7 +347,7 @@ fn get_process_info(info: i32) -> i32 {
 }
 
 fn set_active(active: bool) {
-	*ACTIVE.write().expect("Failed to modify ACTIVE") = active;
+	*ACTIVE.lock().expect("Failed to modify ACTIVE") = active;
 }
 
 fn get_index(rid: Rid) -> Result<Index, InvalidIndex> {
