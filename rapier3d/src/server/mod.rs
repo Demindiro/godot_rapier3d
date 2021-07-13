@@ -1,8 +1,9 @@
 #[macro_use]
 mod ffi;
+#[macro_use]
+mod call;
 mod area;
 mod body;
-mod call;
 mod index;
 mod joint;
 mod shape;

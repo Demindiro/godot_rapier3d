@@ -438,33 +438,18 @@ mod call {
 
 	/// Set the local center of mass.
 	pub fn set_local_com(arguments: &[&Variant]) -> call::Result {
-		if arguments.len() < 2 {
-			Err(PhysicsCallError::TooFewArguments)
-		} else if arguments.len() > 3 {
-			Err(PhysicsCallError::TooManyArguments)
+		call_check_arg_count!(arguments in 2..3)?;
+		let body = call_get_arg!(arguments[0] => Rid)?;
+		let com = call_get_arg!(arguments[1] => Vector3)?;
+		let wake = call_get_arg!(arguments[2] => bool || true)?;
+		if let Ok(body) = super::get_index(body) {
+			map_or_err!(body, map_body_mut, |body, _| {
+				body.set_local_com(com, wake);
+			});
 		} else {
-			let body = arguments[0]
-				.try_to_rid()
-				.ok_or(PhysicsCallError::invalid_argument(0, VariantType::Rid))?;
-			let com = arguments[1]
-				.try_to_vector3()
-				.ok_or(PhysicsCallError::invalid_argument(0, VariantType::Vector3))?;
-			let wake = if let Some(v) = arguments.get(2) {
-				v
-					.try_to_bool()
-					.ok_or(PhysicsCallError::invalid_argument(0, VariantType::Bool))?
-			} else {
-				false
-			};
-			if let Ok(body) = super::get_index(body) {
-				map_or_err!(body, map_body_mut, |body, _| {
-					body.set_local_com(com, wake);
-				});
-			} else {
-				godot_error!("Invalid index");
-			}
-			Ok(Variant::new())
+			godot_error!("Invalid index");
 		}
+		Ok(Variant::new())
 	}
 }
 
