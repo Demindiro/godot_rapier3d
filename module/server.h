@@ -96,6 +96,12 @@ class PluggablePhysicsServer : public PhysicsServer {
 		return rid;
 	}
 
+	/**
+	 * Returns the index associated with a RID. An index is a 64 bit integer used internally by the
+	 * physics engine and is necessary to use any of the additional methods.
+	 *
+	 * Returns `0` if the RID is invalid.
+	 */
 	_FORCE_INLINE_ index_t get_index(RID rid) const {
 		if (rid.is_valid()) {
 			PluggablePhysicsRID_Data *data = this->rids.get(rid);
@@ -104,12 +110,29 @@ class PluggablePhysicsServer : public PhysicsServer {
 		return 0;
 	}
 
+	/**
+	 * Returns the RID associated with an index. An index is a 64 bit integer used internally by the
+	 * physics engine and is necessary to use any of the additional methods.
+	 */
 	_FORCE_INLINE_ RID get_rid(index_t index) const {
 		return index != 0 ? this->reverse_rids.get(index) : RID();
 	}
 
+	// Every line of C++ I write makes me hate the language even more.
+	//
+	// See https://isocpp.org/wiki/faq/pointers-to-members
+	static index_t _get_index(const struct physics_server *server, godot_rid rid) {
+		return reinterpret_cast<const PluggablePhysicsServer *>(server)->get_index(rid);
+	}
+
+	static godot_rid _get_rid(const struct physics_server *server, index_t index) {
+		return reinterpret_cast<const PluggablePhysicsServer *>(server)->get_rid(index);
+	}
+
 protected:
 	static void _bind_methods();
+
+	Variant call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error);
 
 public:
 	PluggablePhysicsServer();

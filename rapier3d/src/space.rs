@@ -602,6 +602,51 @@ impl Space {
 		// contact_pairs: The description of all the contacts between a **pair of colliders**.
 		self.narrow_phase.contact_pairs().count()
 	}
+
+	/// Return all colliders that intersect with a given ray.
+	pub fn intersections_with_ray(
+		&mut self,
+		origin: Vector3,
+		direction: Vector3,
+		solid: bool,
+		mask: u32,
+		exclude_bodies: Option<&[BodyIndex]>,
+		exclude_areas: Option<&[AreaIndex]>,
+		mut callback: impl FnMut(BodyOrAreaIndex, u32, RayIntersection) -> bool,
+	) {
+		self.update_query_pipeline();
+		self.query_pipeline.intersections_with_ray(
+			&self.colliders,
+			&Ray::new(
+				Point::from(vec_gd_to_na(origin)),
+				vec_gd_to_na(direction.normalize()),
+			),
+			direction.length(),
+			solid,
+			InteractionGroups::new(0, mask),
+			Some(&|handle| {
+				let ud = self.colliders[handle].user_data;
+				body::ColliderUserdata::try_from(ud)
+					.map(|ud| exclude_bodies.map_or(true, |eb| !eb.contains(&ud.index())))
+					.or_else(|_| {
+						area::ColliderUserdata::try_from(ud)
+							.map(|ud| exclude_areas.map_or(true, |ea| !ea.contains(&ud.index())))
+					})
+					.expect("Collider without area or body index")
+			}),
+			|handle, ray_intersection| {
+				let ud = self.colliders[handle].user_data;
+				body::ColliderUserdata::try_from(ud)
+					.map(|ud| (BodyOrAreaIndex::Body(ud.index()), ud.shape()))
+					.or_else(|_| {
+						area::ColliderUserdata::try_from(ud)
+							.map(|ud| (BodyOrAreaIndex::Area(ud.index()), ud.shape()))
+					})
+					.map(|(index, shape_index)| callback(index, shape_index, ray_intersection))
+					.expect("Collider without area or body index")
+			},
+		)
+	}
 }
 
 #[derive(Debug)]

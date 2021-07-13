@@ -1,5 +1,7 @@
 #[macro_use]
 mod ffi;
+#[macro_use]
+mod call;
 mod area;
 mod body;
 mod index;
@@ -14,7 +16,8 @@ use crate::space::Space;
 use crate::*;
 use core::convert::TryInto;
 use core::num::NonZeroU32;
-use gdnative::godot_error;
+use gdnative::core_types::{Rid, Variant};
+use gdnative::{godot_error, sys};
 pub use index::*;
 use joint::Joint;
 use rapier3d::na;
@@ -29,6 +32,13 @@ lazy_static::lazy_static! {
 	static ref SHAPE_INDICES: RwLock<Indices<Shape>> = RwLock::new(Indices::new());
 	static ref SPACE_INDICES: RwLock<Indices<Space>> = RwLock::new(Indices::new());
 }
+
+static mut PHYSICS_SERVER: Option<*const ffi::PhysicsServer> = None;
+static mut GET_RID: Option<unsafe extern "C" fn(*const ffi::PhysicsServer, u64) -> sys::godot_rid> =
+	None;
+static mut GET_INDEX: Option<
+	unsafe extern "C" fn(*const ffi::PhysicsServer, sys::godot_rid) -> u64,
+> = None;
 
 pub enum Instance<A, L> {
 	Attached(A, SpaceIndex),
@@ -246,6 +256,12 @@ macro_rules! map_or_err {
 }
 
 fn init(ffi: &mut ffi::FFI) {
+	unsafe {
+		PHYSICS_SERVER = Some(ffi.server);
+		GET_INDEX = (*ffi.table).server_get_index;
+		GET_RID = (*ffi.table).server_get_rid;
+	}
+	ffi!(ffi, call, call::call);
 	ffi!(ffi, set_active, set_active);
 	ffi!(ffi, init, server_init);
 	ffi!(ffi, flush_queries, flush_queries);
@@ -332,4 +348,22 @@ fn get_process_info(info: i32) -> i32 {
 
 fn set_active(active: bool) {
 	*ACTIVE.write().expect("Failed to modify ACTIVE") = active;
+}
+
+fn get_index(rid: Rid) -> Result<Index, InvalidIndex> {
+	unsafe {
+		debug_assert!(PHYSICS_SERVER.is_some());
+		debug_assert!(GET_INDEX.is_some());
+		let index = GET_INDEX.unwrap_unchecked()(PHYSICS_SERVER.unwrap_unchecked(), *rid.sys());
+		Index::from_raw(index)
+	}
+}
+
+fn get_rid(index: Index) -> Rid {
+	unsafe {
+		debug_assert!(PHYSICS_SERVER.is_some());
+		debug_assert!(GET_RID.is_some());
+		let rid = GET_RID.unwrap_unchecked()(PHYSICS_SERVER.unwrap_unchecked(), index.raw());
+		Rid::from_sys(rid)
+	}
 }

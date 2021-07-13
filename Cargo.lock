@@ -338,6 +338,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rapier3d",
+ "wchar",
 ]
 
 [[package]]
@@ -1045,6 +1046,27 @@ name = "wasm-bindgen-shared"
 version = "0.2.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7cff876b8f18eed75a66cf49b65e7f967cb354a7aa16003fb55dbfd25b44b4f"
+
+[[package]]
+name = "wchar"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "329ba7151d07f65f1ad4b38dc27369c952db9674bb65e6e8aad0b0bc206abf19"
+dependencies = [
+ "wchar-impl",
+]
+
+[[package]]
+name = "wchar-impl"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e98e30fc63796c670f6805bf5cbf2460766f663d7e804beef671ee845d33e39b"
+dependencies = [
+ "libc",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "winapi"

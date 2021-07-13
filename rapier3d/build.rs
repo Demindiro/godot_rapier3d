@@ -152,6 +152,7 @@ fn generate_structs(api: &json::JsonValue) -> TokenStream {
 fn map_type(t: &str) -> TokenStream {
 	match t {
 		"index_t" | "maybe_index_t" => quote!(u64),
+		"uint8_t" => quote!(u8),
 		"uint32_t" => quote!(u32),
 		"int" => quote!(i32),
 		"bool" => quote!(bool),
@@ -159,7 +160,10 @@ fn map_type(t: &str) -> TokenStream {
 		"size_t" => quote!(usize),
 		"void" => quote!(()),
 		"void *" => quote!(*const ()),
+		"const wchar_t *" => quote!(*const wchar::wchar_t),
 		"const index_t *" => quote!(*mut u64),
+		"struct physics_call_result" => quote!(physics_call_result),
+		"const godot_variant **" => quote!(*const *const sys::godot_variant),
 		_ if t.starts_with("struct ") && t.ends_with(" *") => {
 			format!("*mut {}", &t["struct ".len()..t.len() - " *".len()])
 				.parse()
@@ -201,15 +205,19 @@ fn convert_type_from_sys(name: &TokenStream, t: &str) -> (TokenStream, bool) {
 		"size_t" | "uint32_t" | "int" | "bool" | "float" | "real_t" | "void *" => {
 			(quote!(#name), false)
 		}
+		"const wchar_t *" => (quote!(#name), false),
 		"struct physics_ray_info" => (quote!(&*#name), false),
+		"godot_rid" => (quote!(RID), false),
 		"godot_vector3 *" => (
 			quote!(&mut *(#name as *mut sys::godot_vector3 as *mut Vector3)),
 			false,
 		),
+		//"godot_variant" => (quote!(#name), false),
 		"const godot_variant *" => (
 			quote!(&*(#name as *const sys::godot_variant as *const Variant)),
 			false,
 		),
+		"const godot_variant **" => (quote!(#name as *const &Variant), false),
 		"const godot_transform *" => (
 			quote!(&*(#name as *const sys::godot_transform as *const Transform)),
 			false,
@@ -232,14 +240,19 @@ fn get_type_from_sys(t: &str) -> TokenStream {
 		"index_t" => quote!(Index),
 		"maybe_index_t" => quote!(Option<Index>),
 		"void *" => quote!(*const ()),
+		"uint8_t" => quote!(u8),
 		"uint32_t" => quote!(u32),
 		"int" => quote!(i32),
 		"bool" => quote!(bool),
 		"float" | "real_t" => quote!(f32),
 		"size_t" => quote!(usize),
+		"const wchar_t *" => quote!(*const wchar::wchar_t),
+		"godot_rid" => quote!(RID),
 		"godot_vector3 *" => quote!(&mut Vector3),
 		"godot_pool_vector3_array" => quote!(TypedArray<Vector3>),
+		//"godot_variant" => quote!(Variant),
 		"const godot_variant *" => quote!(&Variant),
+		"const godot_variant **" => quote!(*const *const sys::godot_variant),
 		"const godot_transform *" => quote!(&Transform),
 		"const godot_vector3 *" => quote!(&Vector3),
 		_ if t.starts_with("struct ") && t.ends_with(" *") => {

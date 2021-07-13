@@ -9,3 +9,4 @@ module/api.gen.h
 module/server.gen.cpp
 __pycache__/
 *.o
+*.pyc

@@ -214,6 +214,7 @@ impl Body {
 			mp.local_com = Point3::new(0.0, 0.0, 0.0);
 		};
 		mp.inv_mass = body.mass_properties().inv_mass;
+		mp.local_com = body.mass_properties().local_com;
 		body.set_mass_properties(mp, true);
 		self.inertia_stale = false;
 	}
@@ -858,6 +859,15 @@ impl Body {
 			Axis::Z => 2,
 		};
 		self.map_rigidbody(|body| body.is_rotation_locked()[axis])
+	}
+
+	/// Set the local center of mass of this body.
+	pub fn set_local_com(&mut self, position: Vector3, wake_up: bool) {
+		self.map_rigidbody_mut(|body| {
+			let mut mp = *body.mass_properties();
+			mp.local_com = Point::new(position.x, position.y, position.z);
+			body.set_mass_properties(mp, wake_up);
+		})
 	}
 }
 

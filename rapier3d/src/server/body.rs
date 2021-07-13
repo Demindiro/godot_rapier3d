@@ -430,6 +430,31 @@ fn is_axis_locked(body: Index, axis: i32) -> bool {
 	}
 }
 
+/// Extra methods exposed through the "call" function.
+mod call {
+	use super::super::call;
+	use super::*;
+	use ffi::{PhysicsCallError, VariantType};
+
+	/// Set the local center of mass.
+	pub fn set_local_com(arguments: &[&Variant]) -> call::Result {
+		call_check_arg_count!(arguments in 2..3)?;
+		let body = call_get_arg!(arguments[0] => Rid)?;
+		let com = call_get_arg!(arguments[1] => Vector3)?;
+		let wake = call_get_arg!(arguments[2] => bool || true)?;
+		if let Ok(body) = super::get_index(body) {
+			map_or_err!(body, map_body_mut, |body, _| {
+				body.set_local_com(com, wake);
+			});
+		} else {
+			godot_error!("Invalid index");
+		}
+		Ok(Variant::new())
+	}
+}
+
+pub(super) use call::*;
+
 /// Godot's "It's local position but global rotation" is such a mindfuck that this function exists
 /// to help out
 fn transform_force_arguments(

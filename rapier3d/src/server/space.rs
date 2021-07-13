@@ -200,3 +200,129 @@ fn get_contact(space: Index, contact: i32, out: &mut Vector3) {
 	})
 	.unwrap_or(Vector3::zero());
 }
+
+/// Extra methods exposed through the "call" function.
+mod call {
+	use super::super::call;
+	use super::*;
+	use crate::util::*;
+	use ffi::{PhysicsCallError, VariantType};
+	use gdnative::prelude::*;
+
+	/// Return *all* colliders that intersect with a ray. A `VariantArray` will be returned with a
+	/// number of `Dictionary` entries. Each entry has the following fields:
+	///
+	/// * `position`: The location where the ray hit.
+	///
+	/// * `normal`: The normal at the intersection point.
+	///
+	/// * `rid`: The RID of the parent object.
+	///
+	/// * `object_id`: The `ObjectID` of the parent, which is a Body or an `Area´.
+	///
+	/// * `shape`: The index of the shape in the body/area.
+	///
+	/// * `time_of_impact`: The time of impact, where
+	///   `position = from + (to - from) * time_of_impact`
+	///
+	/// There is no order guarantee.
+	///
+	/// `solid` indicates whether it should detect colliders that encapsulate the origin of the
+	/// ray.
+	///
+	/// `exclude` is a `VariantArray` of `Rid`s pointing to bodies that should be ignored.
+	pub fn intersections_with_ray(args: &[&Variant]) -> call::Result {
+		call_check_arg_count!(args in 2..9)?;
+		let space = call_get_arg!(args[0] => Rid)?;
+		let from = call_get_arg!(args[1] => Vector3)?;
+		let to = call_get_arg!(args[2] => Vector3)?;
+		let solid = call_get_arg!(args[3] => bool || false)?;
+		let mask = call_get_arg!(args[4] => u32 || 0xffff_ffff)?;
+		let max_results = call_get_arg!(args[5] => i32 || 32)?;
+		let exclude_bodies = !call_get_arg!(args[6] => bool || false)?;
+		let exclude_areas = !call_get_arg!(args[7] => bool || false)?;
+		let exclude = call_get_arg!(args[8] => VariantArray || VariantArray::new().into_shared())?;
+		if let Ok(space) = super::get_index(space) {
+			map_or_err!(space, map_space_mut, |space, _| {
+				let array = VariantArray::new();
+				let mut exclude_bodies =
+					exclude_bodies.then(|| Vec::with_capacity(exclude.len() as usize));
+				let mut exclude_areas =
+					exclude_areas.then(|| Vec::with_capacity(exclude.len() as usize));
+				for (i, e) in exclude.iter().enumerate() {
+					if let Some(e) = e.try_to_rid() {
+						if let Ok(e) = super::get_index(e) {
+							if let Some(e) = e.as_body() {
+								exclude_bodies.as_mut().map(|v| v.push(e));
+							} else if let Some(e) = e.as_area() {
+								exclude_areas.as_mut().map(|v| v.push(e));
+							} else {
+								godot_error!("RID {:?} is not a body", e);
+							}
+						} else {
+							godot_error!("RID {:?} is invalid", e);
+						}
+					} else {
+						godot_error!("Element {} is not a RID", i);
+					}
+				}
+				// Creating the Godot strings before hand should be slightly more efficient
+				// (less allocations, more ref counting). Should probably be done as a global
+				// lazy static or similar but w/e.
+				let position_key = "position".to_variant();
+				let normal_key = "normal".to_variant();
+				let rid_key = "rid".to_variant();
+				let object_id_key = "object_id".to_variant();
+				let shape_key = "shape".to_variant();
+				let toi_key = "time_of_impact".to_variant();
+
+				let bodies = BodyIndex::read_all();
+				let areas = AreaIndex::read_all();
+				space.intersections_with_ray(
+					from,
+					to - from,
+					solid,
+					mask,
+					exclude_bodies.as_ref().map(|v| &v[..]),
+					exclude_areas.as_ref().map(|v| &v[..]),
+					|index, shape_index, ri| {
+						let dict = Dictionary::new();
+						let pos = (to - from) * ri.toi + from;
+						dict.insert(position_key.clone(), pos);
+						dict.insert(
+							normal_key.clone(),
+							vec_na_to_gd(ri.normal),
+						);
+						let (object_id, index) = match index {
+							BodyOrAreaIndex::Body(body) => (
+								bodies.get(body.into()).map(|b| b.object_id()).expect("Invalid body"),
+								Index::Body(body),
+							),
+							BodyOrAreaIndex::Area(area) => (
+								areas.get(area.into()).map(|a| a.object_id()).expect("Invalid area"),
+								Index::Area(area),
+							),
+						};
+						let rid = super::get_rid(index.into());
+						dict.insert(
+							object_id_key.clone(),
+							object_id.map(ObjectID::get).unwrap_or(0),
+						);
+						dict.insert(shape_key.clone(), shape_index);
+						dict.insert(rid_key.clone(), rid);
+						dict.insert(toi_key.clone(), ri.toi);
+						array.push(dict);
+						array.len() < max_results
+					},
+				);
+				Ok(array.owned_to_variant())
+			})
+			.unwrap_or(Ok(Variant::new()))
+		} else {
+			godot_error!("Invalid index");
+			Ok(Variant::new())
+		}
+	}
+}
+
+pub(super) use call::*;
