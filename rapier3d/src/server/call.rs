@@ -15,7 +15,7 @@ macro_rules! call_get_arg {
 				.$ty_fn()
 				.ok_or(PhysicsCallError::invalid_argument($index, VariantType::$ty))
 		} else {
-			Ok($default)
+			Ok((|| { $default })())
 		}
 	};
 	($args:ident[$index:literal] => bool) => {
@@ -24,11 +24,35 @@ macro_rules! call_get_arg {
 	($args:ident[$index:literal] => bool || $default:expr) => {
 		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_bool, Bool, $default)
 	};
+	($args:ident[$index:literal] => i64) => {
+		call_get_arg!(@INTERNAL $args, $index, try_to_i64, Int)
+	};
+	($args:ident[$index:literal] => i64 || $default:expr) => {
+		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_i64, Int, $default)
+	};
+	($args:ident[$index:literal] => i32) => {
+		call_get_arg!(@INTERNAL $args, $index, try_to_i64, Int).map(|v| v as i32)
+	};
+	($args:ident[$index:literal] => i32 || $default:expr) => {
+		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_i64, Int, $default).map(|v| v as i32)
+	};
+	($args:ident[$index:literal] => u32) => {
+		call_get_arg!(@INTERNAL $args, $index, try_to_i64, Int).map(|v| v as u32)
+	};
+	($args:ident[$index:literal] => u32 || $default:expr) => {
+		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_i64, Int, $default).map(|v| v as u32)
+	};
 	($args:ident[$index:literal] => Vector3) => {
 		call_get_arg!(@INTERNAL $args, $index, try_to_vector3, Vector3)
 	};
 	($args:ident[$index:literal] => Vector3 || $default:expr) => {
 		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_vector3, Vector3, $default)
+	};
+	($args:ident[$index:literal] => VariantArray) => {
+		call_get_arg!(@INTERNAL $args, $index, try_to_array, Array)
+	};
+	($args:ident[$index:literal] => VariantArray || $default:expr) => {
+		call_get_arg!(@INTERNAL @maybe $args, $index, try_to_array, Array, $default)
 	};
 	($args:ident[$index:literal] => Rid) => {
 		call_get_arg!(@INTERNAL $args, $index, try_to_rid, Rid)
@@ -39,18 +63,16 @@ macro_rules! call_get_arg {
 }
 
 macro_rules! call_check_arg_count {
-	($args:ident in $min:literal..$max:literal) => {
-		{
-			const _MIN_MAX_CHECK: usize = $max - $min;
-			if $args.len() < $min {
-				Err(PhysicsCallError::TooFewArguments)
-			} else if $args.len() > $max {
-				Err(PhysicsCallError::TooManyArguments)
-			} else {
-				Ok(())
-			}
+	($args:ident in $min:literal..$max:literal) => {{
+		const _MIN_MAX_CHECK: usize = $max - $min;
+		if $args.len() < $min {
+			Err(PhysicsCallError::TooFewArguments)
+		} else if $args.len() > $max {
+			Err(PhysicsCallError::TooManyArguments)
+		} else {
+			Ok(())
 		}
-	}
+	}};
 }
 
 /// Method used to access Rapier-specific functionality.
@@ -75,6 +97,7 @@ pub(super) fn call(
 	use wchar::wch;
 	ffi::PhysicsCallResult::new(match method {
 		wch!("body_set_local_com") => body::set_local_com(arguments),
+		wch!("space_intersections_with_ray") => space::intersections_with_ray(arguments),
 		_ => Err(ffi::PhysicsCallError::InvalidMethod),
 	})
 }

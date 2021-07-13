@@ -32,10 +32,7 @@ macro_rules! gdphysics_init {
 			if table.is_null() {
 				println!("Function table pointer is null");
 			} else {
-				let mut ffi = ffi::FFI {
-					table,
-					server,
-				};
+				let mut ffi = ffi::FFI { table, server };
 				$fn(&mut ffi);
 			}
 		}
@@ -128,7 +125,10 @@ impl From<VariantType> for u8 {
 
 impl PhysicsCallError {
 	pub fn invalid_argument(argument: u8, expected_type: VariantType) -> Self {
-		Self::InvalidArgument { argument, expected_type }
+		Self::InvalidArgument {
+			argument,
+			expected_type,
+		}
 	}
 }
 

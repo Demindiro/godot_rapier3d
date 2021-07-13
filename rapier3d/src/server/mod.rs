@@ -34,8 +34,11 @@ lazy_static::lazy_static! {
 }
 
 static mut PHYSICS_SERVER: Option<*const ffi::PhysicsServer> = None;
-static mut GET_RID: Option<unsafe extern "C" fn(*const ffi::PhysicsServer, u64) -> sys::godot_rid> = None;
-static mut GET_INDEX: Option<unsafe extern "C" fn(*const ffi::PhysicsServer, sys::godot_rid) -> u64> = None;
+static mut GET_RID: Option<unsafe extern "C" fn(*const ffi::PhysicsServer, u64) -> sys::godot_rid> =
+	None;
+static mut GET_INDEX: Option<
+	unsafe extern "C" fn(*const ffi::PhysicsServer, sys::godot_rid) -> u64,
+> = None;
 
 pub enum Instance<A, L> {
 	Attached(A, SpaceIndex),
