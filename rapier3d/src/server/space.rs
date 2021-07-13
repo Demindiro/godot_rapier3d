@@ -287,7 +287,7 @@ mod call {
 					exclude_areas.as_ref().map(|v| &v[..]),
 					|index, shape_index, ri| {
 						let dict = Dictionary::new();
-						let pos = (to - from) * ri.toi + from;
+						let pos = (to - from).normalize() * ri.toi + from;
 						dict.insert(position_key.clone(), pos);
 						dict.insert(
 							normal_key.clone(),
