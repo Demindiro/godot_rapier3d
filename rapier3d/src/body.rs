@@ -448,11 +448,24 @@ impl Body {
 		}
 	}
 
+	/// Applies a force to the center of the body . The force must be in global space.
+	pub fn add_central_force(&mut self, force: Vector3) {
+		let force = vec_gd_to_na(force);
+		self.map_rigidbody_mut(|body| body.apply_force(force, true));
+	}
+
 	/// Applies a force to the body at the given position. The force must be in global space.
 	pub fn add_force_at_position(&mut self, force: Vector3, position: Vector3) {
 		let force = vec_gd_to_na(force);
 		let position = Point3::from(vec_gd_to_na(position));
 		self.map_rigidbody_mut(|body| body.apply_force_at_point(force, position, true));
+	}
+
+	/// Applies an impulse to the body at the given position. The impulse must be in global space.
+	/// The impulse is applied immediately.
+	pub fn add_central_impulse(&mut self, impulse: Vector3) {
+		let impulse = vec_gd_to_na(impulse);
+		self.map_rigidbody_mut(|body| body.apply_impulse(impulse, true));
 	}
 
 	/// Applies an impulse to the body at the given position. The impulse must be in global space.
