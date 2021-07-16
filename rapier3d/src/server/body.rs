@@ -450,6 +450,21 @@ mod call {
 	use super::*;
 	use ffi::{PhysicsCallError, VariantType};
 
+	/// Return the local center of mass.
+	pub fn get_local_com(arguments: &[&Variant]) -> call::Result {
+		call_check_arg_count!(arguments in 1..1)?;
+		let body = call_get_arg!(arguments[0] => Rid)?;
+		if let Ok(body) = super::get_index(body) {
+			Ok(map_or_err!(body, map_body_mut, |body, _| {
+				body.local_com().owned_to_variant()
+			})
+			.unwrap_or(Variant::new()))
+		} else {
+			godot_error!("Invalid index");
+			Ok(Variant::new())
+		}
+	}
+
 	/// Set the local center of mass.
 	pub fn set_local_com(arguments: &[&Variant]) -> call::Result {
 		call_check_arg_count!(arguments in 2..3)?;
@@ -459,6 +474,40 @@ mod call {
 		if let Ok(body) = super::get_index(body) {
 			map_or_err!(body, map_body_mut, |body, _| {
 				body.set_local_com(com, wake);
+			});
+		} else {
+			godot_error!("Invalid index");
+		}
+		Ok(Variant::new())
+	}
+
+	/// Apply a force to a body. The origin and direction are in the local space of the body.
+	///
+	/// The origin is relative to the center of mass.
+	pub fn add_local_force(arguments: &[&Variant]) -> call::Result {
+		call_check_arg_count!(arguments in 3..3)?;
+		let body = call_get_arg!(arguments[0] => Rid)?;
+		let force = call_get_arg!(arguments[1] => Vector3)?;
+		let origin = call_get_arg!(arguments[2] => Vector3)?;
+		if let Ok(body) = super::get_index(body) {
+			map_or_err!(body, map_body_mut, |body, _| {
+				body.add_local_force_at_position(force, origin);
+			});
+		} else {
+			godot_error!("Invalid index");
+		}
+		Ok(Variant::new())
+	}
+
+	/// Apply an impulse to a body. The origin and direction are in the local space of the body.
+	pub fn add_local_impulse(arguments: &[&Variant]) -> call::Result {
+		call_check_arg_count!(arguments in 3..3)?;
+		let body = call_get_arg!(arguments[0] => Rid)?;
+		let origin = call_get_arg!(arguments[1] => Vector3)?;
+		let direction = call_get_arg!(arguments[2] => Vector3)?;
+		if let Ok(body) = super::get_index(body) {
+			map_or_err!(body, map_body_mut, |body, _| {
+				body.add_local_impulse_at_position(origin, direction);
 			});
 		} else {
 			godot_error!("Invalid index");

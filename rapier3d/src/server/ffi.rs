@@ -82,8 +82,12 @@ pub enum PhysicsCallError {
 		argument: u8,
 		expected_type: VariantType,
 	},
-	TooManyArguments,
-	TooFewArguments,
+	TooManyArguments {
+		max: u8,
+	},
+	TooFewArguments {
+		min: u8,	
+	},
 	InstanceIsNull,
 }
 
@@ -146,12 +150,14 @@ impl PhysicsCallResult {
 				status: match &e {
 					PhysicsCallError::InvalidMethod => 1,
 					PhysicsCallError::InvalidArgument { .. } => 2,
-					PhysicsCallError::TooManyArguments => 3,
-					PhysicsCallError::TooFewArguments => 4,
+					PhysicsCallError::TooManyArguments { .. } => 3,
+					PhysicsCallError::TooFewArguments { .. } => 4,
 					PhysicsCallError::InstanceIsNull => 5,
 				},
 				argument: match &e {
-					PhysicsCallError::InvalidArgument { argument, .. } => *argument,
+					PhysicsCallError::InvalidArgument { argument: v, .. }
+					| PhysicsCallError::TooFewArguments { min: v }
+					| PhysicsCallError::TooManyArguments { max: v } => *v,
 					_ => 0,
 				},
 				expected_type: match e {
