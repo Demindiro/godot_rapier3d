@@ -461,11 +461,43 @@ impl Body {
 		self.map_rigidbody_mut(|body| body.apply_force_at_point(force, position, true));
 	}
 
+	/// Applies a force to the body at the given position. The force must be in local space.
+	pub fn add_local_force_at_position(&mut self, force: Vector3, position: Vector3) {
+		let force = vec_gd_to_na(force);
+		let position = Point3::from(vec_gd_to_na(position));
+		self.map_rigidbody_mut(|body| {
+			let body_pos = body.position();
+			let force = body_pos.transform_vector(&force);
+			let position = body_pos.transform_point(&position);
+			// apply_force_at_point seems to be broken:
+			// https://github.com/dimforge/rapier/issues/216
+			let world_com = body_pos.transform_point(&body.mass_properties().local_com);
+			body.apply_force(force, false);
+			body.apply_torque((position - world_com).cross(&force), true);
+		});
+	}
+
 	/// Applies an impulse to the body at the given position. The impulse must be in global space.
 	/// The impulse is applied immediately.
 	pub fn add_central_impulse(&mut self, impulse: Vector3) {
 		let impulse = vec_gd_to_na(impulse);
 		self.map_rigidbody_mut(|body| body.apply_impulse(impulse, true));
+	}
+
+	/// Applies a impulse to the body at the given position. The impulse must be in local space.
+	pub fn add_local_impulse_at_position(&mut self, impulse: Vector3, position: Vector3) {
+		let impulse = vec_gd_to_na(impulse);
+		let position = Point3::from(vec_gd_to_na(position));
+		self.map_rigidbody_mut(|body| {
+			let body_pos = body.position();
+			let impulse = body_pos.transform_vector(&impulse);
+			let position = body_pos.transform_point(&position);
+			// apply_impulse_at_point is presumably also broken:
+			// https://github.com/dimforge/rapier/issues/216
+			let world_com = body_pos.transform_point(&body.mass_properties().local_com);
+			body.apply_impulse(impulse, false);
+			body.apply_torque_impulse((position - world_com).cross(&impulse), true);
+		});
 	}
 
 	/// Applies an impulse to the body at the given position. The impulse must be in global space.
@@ -872,6 +904,11 @@ impl Body {
 			Axis::Z => 2,
 		};
 		self.map_rigidbody(|body| body.is_rotation_locked()[axis])
+	}
+
+	/// Return the local center of mass of this body.
+	pub fn local_com(&self) -> Vector3 {
+		self.map_rigidbody(|body| vec_na_to_gd(body.mass_properties().local_com.coords))
 	}
 
 	/// Set the local center of mass of this body.

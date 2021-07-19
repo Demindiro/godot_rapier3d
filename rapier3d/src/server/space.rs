@@ -289,17 +289,20 @@ mod call {
 						let dict = Dictionary::new();
 						let pos = (to - from).normalize() * ri.toi + from;
 						dict.insert(position_key.clone(), pos);
-						dict.insert(
-							normal_key.clone(),
-							vec_na_to_gd(ri.normal),
-						);
+						dict.insert(normal_key.clone(), vec_na_to_gd(ri.normal));
 						let (object_id, index) = match index {
 							BodyOrAreaIndex::Body(body) => (
-								bodies.get(body.into()).map(|b| b.object_id()).expect("Invalid body"),
+								bodies
+									.get(body.into())
+									.map(|b| b.object_id())
+									.expect("Invalid body"),
 								Index::Body(body),
 							),
 							BodyOrAreaIndex::Area(area) => (
-								areas.get(area.into()).map(|a| a.object_id()).expect("Invalid area"),
+								areas
+									.get(area.into())
+									.map(|a| a.object_id())
+									.expect("Invalid area"),
 								Index::Area(area),
 							),
 						};

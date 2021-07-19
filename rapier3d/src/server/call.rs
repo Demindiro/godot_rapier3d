@@ -66,9 +66,9 @@ macro_rules! call_check_arg_count {
 	($args:ident in $min:literal..$max:literal) => {{
 		const _MIN_MAX_CHECK: usize = $max - $min;
 		if $args.len() < $min {
-			Err(PhysicsCallError::TooFewArguments)
+			Err(PhysicsCallError::TooFewArguments { min: $min })
 		} else if $args.len() > $max {
-			Err(PhysicsCallError::TooManyArguments)
+			Err(PhysicsCallError::TooManyArguments { max: $max })
 		} else {
 			Ok(())
 		}
@@ -96,7 +96,10 @@ pub(super) fn call(
 
 	use wchar::wch;
 	ffi::PhysicsCallResult::new(match method {
+		wch!("body_get_local_com") => body::get_local_com(arguments),
 		wch!("body_set_local_com") => body::set_local_com(arguments),
+		wch!("body_add_local_force") => body::add_local_force(arguments),
+		wch!("body_add_local_impulse") => body::add_local_impulse(arguments),
 		wch!("space_intersections_with_ray") => space::intersections_with_ray(arguments),
 		_ => Err(ffi::PhysicsCallError::InvalidMethod),
 	})
