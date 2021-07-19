@@ -361,7 +361,7 @@ impl Space {
 		body_a: RigidBodyHandle,
 		body_b: RigidBodyHandle,
 	) -> JointHandle {
-		self.joints.insert(&mut self.bodies, body_a, body_b, joint)
+		self.joints.insert(body_a, body_b, joint)
 	}
 
 	/// Removes the joint with the given handle. Returns the joint if it existed
