@@ -80,7 +80,7 @@ impl Area {
 		Self {
 			index: None,
 			shapes: Vec::new(),
-			instance: Instance::Loose(RigidBodyBuilder::new_static().build()),
+			instance: Instance::loose(RigidBodyBuilder::new_static().build()),
 			scale: Vector3::one(),
 			linear_damp: 0.0,
 			angular_damp: 0.0,
@@ -307,13 +307,13 @@ impl Area {
 	/// Sets the space of this area. This removes the area from it's current space, if any.
 	pub fn set_space(&mut self, space: Option<SpaceIndex>) {
 		// Judging by the API areas are intended to be moved around, so use kinematic
-		let instance = Instance::Loose(RigidBodyBuilder::new_kinematic_position_based().build());
+		let instance = Instance::loose(RigidBodyBuilder::new_kinematic_position_based().build());
 		let instance = mem::replace(&mut self.instance, instance);
 		let body = match instance {
 			Instance::Attached((body, _), space) => space
 				.map_mut(|space| space.remove_body(body).expect("Invalid body handle"))
 				.expect("Invalid space"),
-			Instance::Loose(body) => body,
+			Instance::Loose(body) => *body,
 		};
 
 		self.instance = if let Some(space) = space {
@@ -342,7 +342,7 @@ impl Area {
 				.expect("Invalid space");
 			Instance::Attached(a, space)
 		} else {
-			Instance::Loose(body)
+			Instance::loose(body)
 		}
 	}
 

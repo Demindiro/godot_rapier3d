@@ -42,7 +42,14 @@ static mut GET_INDEX: Option<
 
 pub enum Instance<A, L> {
 	Attached(A, SpaceIndex),
-	Loose(L),
+	Loose(Box<L>),
+}
+
+impl<A, L> Instance<A, L> {
+	/// Create a new loose instance
+	pub fn loose(item: L) -> Self {
+		Self::Loose(Box::new(item))
+	}
 }
 
 #[derive(Debug)]
