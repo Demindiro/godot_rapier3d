@@ -76,7 +76,7 @@ impl Joint {
 			}
 		} else {
 			Self {
-				joint: Instance::Loose(LooseJoint {
+				joint: Instance::loose(LooseJoint {
 					params,
 					body_a,
 					body_b,

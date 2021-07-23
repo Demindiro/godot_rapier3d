@@ -77,7 +77,7 @@ pub struct InvalidShape;
 impl Body {
 	pub fn new(body: RigidBody) -> Self {
 		Self {
-			body: Instance::Loose(body),
+			body: Instance::loose(body),
 			object_id: None,
 			shapes: Vec::new(),
 			scale: Vector3::one(),
@@ -627,7 +627,7 @@ impl Body {
 		self.body = if let Instance::Loose(b) = b {
 			let mut collider_handles = Vec::with_capacity(colliders.len());
 			let mp = *b.mass_properties();
-			let handle = space.add_body(b);
+			let handle = space.add_body(*b);
 			for collider in colliders {
 				let handle = collider.map(|c| space.add_collider(c, handle));
 				collider_handles.push(handle);
@@ -653,7 +653,7 @@ impl Body {
 			let body = space
 				.map_mut(|space| space.remove_body(*body).expect("Invalid body handle"))
 				.expect("Failed to modify space");
-			self.body = Instance::Loose(body);
+			self.body = Instance::loose(body);
 		}
 	}
 
