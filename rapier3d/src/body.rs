@@ -407,9 +407,9 @@ impl Body {
 				(self.angular_damp + d * i) / (i + 1.0)
 			}
 		} else if self.linear_damp < 0.0 {
-			space_linear_damp
+			space_angular_damp
 		} else {
-			self.linear_damp
+			self.angular_damp
 		});
 		self.area_gravity = None;
 		self.area_linear_damp = None;
@@ -774,11 +774,13 @@ impl Body {
 
 	/// Sets the linear damp of this body
 	pub fn set_linear_damp(&mut self, damp: f32) {
+		self.linear_damp = damp;
 		self.map_rigidbody_mut(|body| body.set_linear_damping(damp));
 	}
 
 	/// Sets the angular damp of this body
 	pub fn set_angular_damp(&mut self, damp: f32) {
+		self.angular_damp = damp;
 		self.map_rigidbody_mut(|body| body.set_angular_damping(damp));
 	}
 
